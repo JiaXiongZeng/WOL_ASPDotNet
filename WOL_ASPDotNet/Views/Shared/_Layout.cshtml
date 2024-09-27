@@ -1,0 +1,26 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>@ViewData["Title"]</title>
+    <!-- Entry point for development -->
+    <environment include="Development">
+        <script type="module">
+          import RefreshRuntime from 'https://localhost:5173/@@react-refresh'
+          RefreshRuntime.injectIntoGlobalHook(window)
+          window.$RefreshReg$ = () => {}
+          window.$RefreshSig$ = () => (type) => type
+          window.__vite_plugin_react_preamble_installed__ = true
+        </script>
+    </environment>
+    <environment include="Development">
+        <!-- It's mandatory to use the full url for the Vite client script. -->
+        <script type="module" src="https://localhost:5173/@@vite/client"></script>
+    </environment>
+    @await RenderSectionAsync("Scripts", required: false)
+</head>
+<body>
+    @RenderBody()    
+</body>
+</html>

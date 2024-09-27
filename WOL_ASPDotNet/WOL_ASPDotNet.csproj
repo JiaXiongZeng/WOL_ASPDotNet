@@ -1,0 +1,53 @@
+﻿<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UserSecretsId>edc8bd0e-a686-42e9-9c9e-49b12d453f8b</UserSecretsId>
+    <DockerDefaultTargetOS>Linux</DockerDefaultTargetOS>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Dapper" Version="2.1.35" />
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.5" />
+    <PackageReference Include="Microsoft.Extensions.Caching.StackExchangeRedis" Version="8.0.6" />
+    <PackageReference Include="Microsoft.TypeScript.MSBuild" Version="5.4.4">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="Microsoft.VisualStudio.Azure.Containers.Tools.Targets" Version="1.19.6" />
+    <PackageReference Include="PacketDotNet" Version="1.4.7" />
+    <PackageReference Include="SharpPcap" Version="6.3.0" />
+    <PackageReference Include="Vite.AspNetCore" Version="2.0.0" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Remove="Infrastructure\Filters\AuthorizationFilter.cs" />
+    <Compile Remove="Infrastructure\Middlewares\CustomizedIdentityMiddelware.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Update="PCs.db">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <Folder Include="ClientSrc\styles\" />
+    <Folder Include="Infrastructure\Middlewares\" />
+  </ItemGroup>
+  <!-- Ensure Node environment on Build -->
+  <Target Name="DebugEnsureNodeEnv" BeforeTargets="Build;PublishBuildAssets" Condition=" !Exists('node_modules') ">
+	  <!-- Ensure Node.js is installed -->
+	  <Exec Command="node --version" ContinueOnError="true">
+		  <Output TaskParameter="ExitCode" PropertyName="ErrorCode" />
+	  </Exec>
+	  <Error Condition="'$(ErrorCode)' != '0'" Text="Node.js is required to build and run this project. To continue, please install Node.js from https://nodejs.org/, and then restart your command prompt or IDE." />
+	  <Message Importance="high" Text="Restoring dependencies using 'npm'. This may take several minutes..." />
+	  <!-- Install Node packages -->
+	  <Exec Command="npm install" />
+  </Target>
+  <!-- Build the final assets -->
+  <Target Name="PublishBuildAssets" BeforeTargets="Build" Condition=" '$(Configuration)' == 'Release' ">
+	  <!-- Build the final assets -->
+	  <Exec Command="npm run build" />
+  </Target>
+</Project>
