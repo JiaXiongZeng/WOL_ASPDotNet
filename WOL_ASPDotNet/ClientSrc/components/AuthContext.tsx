@@ -8,7 +8,7 @@ export const AuthDispatchContext = createContext<Nullable<Dispatch<AuthAction>>>
 export enum AuthActionKind {
     SET = 'SET',
     CLEAR = 'CLEAR'
-};
+}
 
 export interface AuthAction {
     actionKind: AuthActionKind,

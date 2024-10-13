@@ -1,6 +1,7 @@
 ﻿import {
     useEffect, useState, useRef, useCallback, useContext,
-    forwardRef, useImperativeHandle
+    forwardRef, useImperativeHandle,
+    ReactNode
 } from 'react';
 import { useImmer } from 'use-immer';
 import { type HostViewModel } from 'models/HostViewModel';
@@ -15,12 +16,21 @@ import TableBody from '@mui/material/TableBody';
 import MuiTableRow from '@mui/material/TableRow';
 import TableCell from '@mui/material/TableCell';
 
+import SpeedDial from '@mui/material/SpeedDial';
+import SpeedDialIcon from '@mui/material/SpeedDialIcon';
+import SpeedDialAction from '@mui/material/SpeedDialAction';
+
 import IconButton from '@mui/material/IconButton';
 import PowerOffIcon from '@mui/icons-material/PowerOff';
+import DeviceHubIcon from '@mui/icons-material/DeviceHub';
 import ConnectedTvIcon from '@mui/icons-material/ConnectedTv';
+import TerminalIcon from '@mui/icons-material/Terminal';
+import VisibilityIcon from '@mui/icons-material/Visibility';
+import SettingsIcon from '@mui/icons-material/Settings';
 import SpeedIcon from '@mui/icons-material/Speed';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import StopIcon from '@mui/icons-material/Stop';
+import SaveIcon from '@mui/icons-material/Save';
 
 import Button from '@mui/material/Button';
 import Typography from '@mui/material/Typography';
@@ -34,6 +44,9 @@ import { TableHead, TableRow } from '@utilities/styles/CustomizedTableStyle';
 
 import { ConfigContext } from '@components/ConfigContext';
 
+import ConnectionSettingsPanel, { ConnectionSettingsPanelHandler } from '@components/ConnectionSettingsPanel';
+import { HostCrendentialViewModel } from '@models/HostCredentialViewModel';
+
 import { submitForm } from '@utilities/FormUtility';
 
 import { MESSAGE_STATUS, ResponseMessage } from '@models/ResponseMessage';
@@ -41,13 +54,40 @@ import { ICMPEchoInfo } from '@models/ICMPEchoInfo';
 
 import * as lodash from 'lodash';
 
-//RDP (Power on) icon
-const PowerOn = styled(ConnectedTvIcon)(() => ({
+//Power on icon
+const PowerOn = styled(DeviceHubIcon)(() => ({
     color: "#03AED2"
 }));
 
+//RDP icon
+const RDP = styled(ConnectedTvIcon)(() => ({
+    color: "#03AED2"
+}));
+
+//SSH icon
+const SSH = styled(TerminalIcon)(() => ({
+    color: "#03AED2"
+}));
+
+
+//VNC icon
+const VNC = styled(VisibilityIcon)(() => ({
+    color: "#03AED2"
+}));
+
+const ConnActions = [
+    { icon: <RDP />, name: 'Remote Desktop Protocol (RDP)' },
+    { icon: <SSH />, name: 'Secure Shell (SSH)' },
+    { icon: <VNC />, name: 'Virtual Network Computing (VNC)' }
+];
+
 //Power off icon
 const PowerOff = styled(PowerOffIcon)(() => ({
+    color: "#03AED2"
+}));
+
+//Settings icon
+const Settings = styled(SettingsIcon)(() => ({
     color: "#03AED2"
 }));
 
@@ -71,6 +111,7 @@ export type HostListHandler = {
 const HostList = forwardRef<HostListHandler, HostListProp>((props, ref) => {
     const [hostList, setHostList] = useImmer<Nullable<HostViewModel[]>>(null);
     const modalRef = useRef<CustomizedDialogHandler>(null);
+    const modalConnSettingsRef = useRef<CustomizedDialogHandler>(null);
     const modalInfoRef = useRef<CustomizedDialogHandler>(null);
     const selectedItemsRef = useRef<HostViewModel[]>([]);
     const { selectable, showAction } = props;
@@ -81,6 +122,8 @@ const HostList = forwardRef<HostListHandler, HostListProp>((props, ref) => {
 
     const utilityRef = useRef<UtilityPanelHandler>(null);
     const [isPingStart, setIsPingStart] = useState<boolean>(false);
+
+    const connSettingsRef = useRef<ConnectionSettingsPanelHandler>(null);
 
     /************************** Selection Feature Begin **************************/
     const [rowCount, setRowCount] = useState(0);
@@ -149,7 +192,7 @@ const HostList = forwardRef<HostListHandler, HostListProp>((props, ref) => {
                             Mac: host.MacAddress
                         }
                     }).then(response => {
-                        var respData = response.data;
+                        const respData = response.data;
                         if (respData.Status == MESSAGE_STATUS.OK) {
                             if (respData.Attachment && !respData.Attachment.IsTimeout) {
                                 const idxOfHost = lodash.findIndex(hostList, x => x.MacAddress == host.MacAddress);
@@ -203,6 +246,31 @@ const HostList = forwardRef<HostListHandler, HostListProp>((props, ref) => {
         );
     }, [isPingStart]);
 
+    const loadConnSettings = async (macAddress: string) => {
+        await axios.get<ResponseMessage<HostCrendentialViewModel>>("/HostCredential/Get", {
+            params: {
+                macAddress: macAddress
+            }
+        }).then(resp => {
+            const respData = resp.data;
+            let contentNode: ReactNode = null;
+            let contentData: Nullable<HostCrendentialViewModel> = null;
+            if (respData.Status == MESSAGE_STATUS.OK) {
+                if (respData.Attachment) {
+                    contentData = { ...respData.Attachment };
+                    contentNode = <ConnectionSettingsPanel data={contentData} ref={connSettingsRef} />;
+                } else {
+                    contentData = {
+                        MacAddress: macAddress
+                    } as HostCrendentialViewModel;
+                    contentNode = <ConnectionSettingsPanel data={contentData} ref={connSettingsRef} />;
+                }
+
+                modalConnSettingsRef.current?.setContentPanel(contentNode);
+                modalConnSettingsRef.current?.setOpen(true);
+            }
+        });
+    };
 
     useImperativeHandle(ref, () => {
         return {
@@ -243,11 +311,11 @@ const HostList = forwardRef<HostListHandler, HostListProp>((props, ref) => {
                                 </TableCell>
                             }                            
                             <TableCell align="center">HostName</TableCell>
-                            <TableCell align="center">Domain</TableCell>
-                            <TableCell align="center">IPv4</TableCell>
-                            <TableCell align="center">IPv6</TableCell>
-                            <TableCell align="center">MacAddress</TableCell>
-                            <TableCell align="center">Port</TableCell>
+                            <TableCell align="center" sx={{ minWidth: "210px" }} >Domain</TableCell>
+                            <TableCell align="center" sx={{ minWidth: "110px" }} >IPv4</TableCell>
+                            {/*<TableCell align="center">IPv6</TableCell>*/}
+                            <TableCell align="center" sx={{ minWidth: "160px" }} >MacAddress</TableCell>
+                            <TableCell align="center" sx={{ minWidth: "80px" }}>Port</TableCell>
                             {
                                 showAction &&
                                 <TableCell align="center">Action</TableCell>
@@ -288,69 +356,124 @@ const HostList = forwardRef<HostListHandler, HostListProp>((props, ref) => {
                                     </TableCell>
                                     <TableCell align="center">{row.Domain}</TableCell>
                                     <TableCell align="center">{row.IPv4}</TableCell>
-                                    <TableCell align="center">{row.IPv6}</TableCell>
+                                    {/*<TableCell align="center">{row.IPv6}</TableCell>*/}
                                     <TableCell align="center">{row.MacAddress}</TableCell>
                                     <TableCell align="center">{row.WOL_Port}</TableCell>
                                     {
                                         showAction &&
                                         <TableCell align="center">
-                                            {
-                                                (
-                                                    row.PowerOn
-                                                        ?
-                                                        <Tooltip arrow title="Turn off PC via RDP" onClick={() => {
-                                                                const mstscURL = `${configs?.MstscHostURL}/`;
-                                                                const bodyData = {
-                                                                    ip: row.IPv4,
-                                                                    //domain: row.Domain,
-                                                                    //userName: "RDP login account",
-                                                                    //password: "RDP login password"
-                                                                };
-                                                                submitForm(mstscURL, bodyData, "_blank");
-                                                            }}>
-                                                                <IconButton>
-                                                                    <PowerOn />
-                                                                </IconButton>
-                                                        </Tooltip>                                                        
-                                                        :
-                                                        <Tooltip arrow title="Turn on PC" onClick={async() => {
-                                                                const data = {
-                                                                    macAddress: row.MacAddress,
-                                                                    port: row.WOL_Port
-                                                                };
-                                                                await axios.post<ResponseMessage<void>>("/Host/WakeOnLan", data, {
-                                                                    responseType: "json"
-                                                                }).then(resp => {
-                                                                    const respData = resp.data;
-                                                                    if (respData.Status == MESSAGE_STATUS.OK) {
-                                                                        modalInfoRef.current?.setContentPanel(
-                                                                            <Typography>
-                                                                                {`Magic Packet has sent to ${row.MacAddress}`}
-                                                                            </Typography>
-                                                                        );
-                                                                        modalInfoRef.current?.setOpen(true);
+                                            <Box sx={{ display: "inline-flex", flexWrap: "wrap" }}>
+                                                {
+                                                    (
+                                                        row.PowerOn
+                                                            ?
+                                                            //<Tooltip arrow title="Turn off PC via RDP" onClick={() => {
+                                                            //        const mstscURL = `${configs?.MstscHostURL}/`;
+                                                            //        const bodyData = {
+                                                            //            ip: row.IPv4,
+                                                            //            //domain: row.Domain,
+                                                            //            //userName: "RDP login account",
+                                                            //            //password: "RDP login password"
+                                                            //        };
+                                                            //        submitForm(mstscURL, bodyData, "_blank");
+                                                            //    }}>
+                                                            //        <IconButton>
+                                                            //            <PowerOn />
+                                                            //        </IconButton>
+                                                            //</Tooltip>
+                                                                <SpeedDial key={`SpeedDial_${row.MacAddress}`}
+                                                                    role="button"
+                                                                    ariaLabel={`Host ${row.HostName ?? row.IPv4} connect method`}
+                                                                    icon={<SpeedDialIcon icon={<PowerOn />} />}
+                                                                    direction="left"
+                                                                    sx={{
+                                                                        '& .MuiSpeedDial-actions': { position: "absolute", margin: "unset", padding: "unset" },
+                                                                        '& .MuiFab-root': {
+                                                                            boxShadow: 'none' // Disable shadow
+                                                                        },
+                                                                        '& .MuiSpeedDial-fab:hover': {
+                                                                            backgroundColor: 'rgba(216,216,216,0.4)'
+                                                                        },
+                                                                    }}
+                                                                    FabProps={{
+                                                                        size: "small",
+                                                                        disableRipple: true,
+                                                                        sx: {
+                                                                            margin: "0",
+                                                                            width: "unset",
+                                                                            height: "unset",
+                                                                            padding: "8px",
+                                                                            backgroundColor: 'transparent'
+                                                                        }
+                                                                    }}>
+                                                                    {
+                                                                        ConnActions.map((action) =>
+                                                                            <SpeedDialAction key={`SpeedDial_${row.MacAddress}_${action.name}`}
+                                                                                role="button"
+                                                                                icon={action.icon}
+                                                                                tooltipTitle={action.name}
+                                                                                sx={{ pdding: "0px", margin: "0px", marginRight: "4px", marginTop: "4px" }}
+                                                                                onClick={() => {
+                                                                                    const mstscURL = `${configs?.MstscHostURL}/`;
+                                                                                    const bodyData = {
+                                                                                        ip: row.IPv4,
+                                                                                        //domain: row.Domain,
+                                                                                        //userName: "RDP login account",
+                                                                                        //password: "RDP login password"
+                                                                                    };
+                                                                                    submitForm(mstscURL, bodyData, "_blank");
+                                                                                }} />
+                                                                        )
                                                                     }
-                                                                });
-                                                            }}>
-                                                                <IconButton>
-                                                                    <PowerOff />
-                                                                </IconButton>
-                                                        </Tooltip>                                                        
-                                                )
-                                            }
-                                            <Tooltip arrow title="Test utility">
-                                                    <IconButton onClick={() => {
-                                                        modalRef.current?.setOpen(true);
-                                                        modalRef.current?.setContentPanel
-                                                        (
-                                                            <Box>
-                                                                <UtilityPanel data={row} ref={utilityRef} />
-                                                            </Box>
-                                                        )
-                                                    }}>
-                                                        <Test />
-                                                    </IconButton>
-                                            </Tooltip>                                            
+                                                            </SpeedDial>                                                           
+                                                            :
+                                                            <Tooltip arrow title="Turn on PC" onClick={async() => {
+                                                                    const data = {
+                                                                        macAddress: row.MacAddress,
+                                                                        port: row.WOL_Port
+                                                                    };
+                                                                    await axios.post<ResponseMessage<void>>("/Host/WakeOnLan", data, {
+                                                                        responseType: "json"
+                                                                    }).then(resp => {
+                                                                        const respData = resp.data;
+                                                                        if (respData.Status == MESSAGE_STATUS.OK) {
+                                                                            modalInfoRef.current?.setContentPanel(
+                                                                                <Typography>
+                                                                                    {`Magic Packet has sent to ${row.MacAddress}`}
+                                                                                </Typography>
+                                                                            );
+                                                                            modalInfoRef.current?.setOpen(true);
+                                                                        }
+                                                                    });
+                                                                }}>
+                                                                    <IconButton>
+                                                                        <PowerOff />
+                                                                    </IconButton>
+                                                            </Tooltip>                                                        
+                                                    )
+                                                }
+                                            
+                                                <Tooltip arrow title="Config the RDP settings">
+                                                        <IconButton onClick={async () => {
+                                                            await loadConnSettings(row.MacAddress);                                                      
+                                                        }}>
+                                                            <Settings />
+                                                        </IconButton>
+                                                </Tooltip>
+                                                <Tooltip arrow title="Test utility">
+                                                        <IconButton onClick={() => {
+                                                            modalRef.current?.setOpen(true);
+                                                            modalRef.current?.setContentPanel
+                                                            (
+                                                                <Box>
+                                                                    <UtilityPanel data={row} ref={utilityRef} />
+                                                                </Box>
+                                                            )
+                                                        }}>
+                                                            <Test />
+                                                        </IconButton>
+                                                </Tooltip>
+                                            </Box>
                                         </TableCell>
                                     }                                    
                                 </TableRow>
@@ -378,6 +501,52 @@ const HostList = forwardRef<HostListHandler, HostListProp>((props, ref) => {
                 }}
                 actionPanel={<PingActionPanel/>}
                 ref={modalRef}  >
+            </CustomizedDialog>
+            <CustomizedDialog
+                title="Connection Settings"
+                open={false}
+                showClose={true}
+                minHeight="60vh"
+                fullWidth={true}
+                actionPanel={
+                    <>
+                        <Button
+                            onClick={() => {
+                                const isValid = connSettingsRef.current?.getValidationResult();
+                                if (isValid) {
+                                    const submitData = connSettingsRef.current?.getSubmitData();
+
+                                    axios.put<ResponseMessage<number>>("/HostCredential/Update", submitData, {
+                                        responseType: "json"
+                                    }).then(async (resp) => {
+                                        const respData = resp.data;
+                                        if (respData.Status == MESSAGE_STATUS.OK) {
+                                            modalInfoRef.current?.setContentPanel(
+                                                <Typography>
+                                                    {`${respData.Attachment} connection setting has been altered!`}
+                                                </Typography>
+                                            );
+                                            await loadConnSettings(submitData?.MacAddress!);
+                                        } else {
+                                            modalInfoRef.current?.setContentPanel(
+                                                <Typography>
+                                                    {respData.Message}
+                                                </Typography>
+                                            );
+                                        }
+
+                                        modalInfoRef.current?.setOpen(true);
+                                    });
+                                }
+                            }}>
+                            <SaveIcon />
+                            <Typography>
+                                Save
+                            </Typography>
+                        </Button>
+                    </>
+                }
+                ref={modalConnSettingsRef}  >                
             </CustomizedDialog>
             <CustomizedDialog
                 title="Infomation"

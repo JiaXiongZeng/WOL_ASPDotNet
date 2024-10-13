@@ -23,7 +23,7 @@ const fieldArrName = 'userList';
 
 interface UserAddFormListProps {
     withDefaultPassword?: boolean
-};
+}
 
 export type UserAddFormListHandler = {
     addNewUser: () => void,
@@ -34,7 +34,7 @@ export type UserAddFormListHandler = {
      */
     getValidationResult: (e?: React.BaseSyntheticEvent<object, any, any> | undefined) => Promise<boolean>,//(e?: React.BaseSyntheticEvent<object, any, any> | undefined) => Promise<void>, //SubmitHandler<{[fieldArrName]:UserInfoViewModel}>,
     getSubmitData: () => UserInfoViewModel[]
-};
+}
 
 const UserAddFormList = forwardRef<UserAddFormListHandler, UserAddFormListProps>((props, ref) => {
     const { withDefaultPassword = true } = props;

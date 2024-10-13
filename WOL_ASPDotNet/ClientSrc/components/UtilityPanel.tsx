@@ -54,7 +54,7 @@ const UtilityPanel = forwardRef<UtilityPanelHandler, UtilityPanelProps>((props, 
                 Mac: host.MacAddress
             }
         }).then(response => {
-            var respData = response.data;
+            const respData = response.data;
             if (respData.Status == MESSAGE_STATUS.OK) {
                 setPingInfoList(draft => {
                     draft.push(respData.Attachment!);

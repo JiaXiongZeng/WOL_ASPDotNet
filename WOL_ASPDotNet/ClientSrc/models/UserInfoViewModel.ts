@@ -7,4 +7,4 @@
     Phone: Nullable<string>,
     IsAdmin: boolean,
     Status: 'A' | 'I'
-};
+}

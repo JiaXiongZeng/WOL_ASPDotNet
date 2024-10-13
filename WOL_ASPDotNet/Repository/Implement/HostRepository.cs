@@ -9,13 +9,13 @@ namespace WOL_ASPDotNet.Repository.Implement
     {
         private IDBConnectionHelper _dbConnHelp;
         public HostRepository(IDBConnectionHelper dBConnectionHelper) { 
-            _dbConnHelp = dBConnectionHelper;
+            this._dbConnHelp = dBConnectionHelper;
         }
 
 
         public async Task<IEnumerable<HostDataModel>> GetHostList()
         {
-            using (var conn = _dbConnHelp.SQLite)
+            using (var conn = this._dbConnHelp.SQLite)
             {
                 string sql = @"SELECT * 
                                FROM Host 
@@ -27,7 +27,7 @@ namespace WOL_ASPDotNet.Repository.Implement
 
         public async Task<int> AddToHostList(IEnumerable<HostDataModel> hosts)
         {
-            using (var conn = _dbConnHelp.SQLite)
+            using (var conn = this._dbConnHelp.SQLite)
             {
                 string sql = @"INSERT INTO Host(HostName, Domain, IPv4, IPv6, MacAddress, WOL_Port, SN, 
                                                 CreateId, CreateDatetime, UpdateId, UpdateDatetime) 
@@ -41,7 +41,7 @@ namespace WOL_ASPDotNet.Repository.Implement
 
         public async Task<int> UpdateHostList(IEnumerable<HostDataModel> hosts)
         {
-            using (var conn = _dbConnHelp.SQLite)
+            using (var conn = this._dbConnHelp.SQLite)
             {
                 string sql = @"UPDATE Host 
                                   SET HostName = @HostName, 
@@ -56,7 +56,7 @@ namespace WOL_ASPDotNet.Repository.Implement
 
         public async Task<int> DeleteHostList(IEnumerable<HostDataModel> hosts)
         {
-            using (var conn = _dbConnHelp.SQLite)
+            using (var conn = this._dbConnHelp.SQLite)
             {
                 string sql = @"DELETE FROM Host 
                                WHERE MacAddress = @MacAddress";

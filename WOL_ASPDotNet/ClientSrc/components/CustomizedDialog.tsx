@@ -1,5 +1,5 @@
 ﻿import {
-    useEffect, useState,
+    useEffect, useState, useCallback,
     forwardRef, useImperativeHandle, ReactNode
 } from 'react';
 
@@ -75,6 +75,10 @@ const CustomizedDialog = forwardRef<CustomizedDialogHandler, Partial<CustomizedD
     const handleClose = () => {
         setOpen(false);
     };
+
+    const BodyComponent = useCallback(() => {
+        return content;
+    }, [content]);
 
     useImperativeHandle(ref, () => {
         return {
@@ -173,7 +177,7 @@ const CustomizedDialog = forwardRef<CustomizedDialogHandler, Partial<CustomizedD
                         }
                     }
                 >
-                    {content}
+                    <BodyComponent />
                 </DialogContent>
                 {
                     actionPanel &&

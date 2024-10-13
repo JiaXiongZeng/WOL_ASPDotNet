@@ -26,6 +26,7 @@ builder.Services.AddControllersWithViews(options => {
 builder.Services.Configure<ConnectionOption>(option =>
 {
     option.SQLite = builder.Configuration.GetValue<string>("ConnectionStrings:SQLite");
+    option.KeyRing = builder.Configuration.GetValue<string>("ConnectionStrings:KeyRing");
 });
 
 
@@ -92,7 +93,9 @@ builder.Services.AddSingleton<IConfigurationRepository, ConfigurationRepository>
 builder.Services.AddSingleton<ICacheHostRepository, CacheHostRepository>();
 builder.Services.AddScoped<IHostRepository, HostRepository>();
 builder.Services.AddScoped<IUserRepository, UserRepository>();
-
+builder.Services.AddScoped<ICryptoUtility, CryptoUtility>();
+builder.Services.AddScoped<IKeyRingRepository, KeyRingRepository>();
+builder.Services.AddScoped<IHostCredentialRepository, HostCredentialRepository>();
 
 var app = builder.Build();
 

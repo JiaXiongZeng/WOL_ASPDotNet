@@ -13,6 +13,13 @@ const baseFolder =
         ? `${process.env.APPDATA}/ASP.NET/https`
         : `${process.env.HOME}/.aspnet/https`;
 
+// Confirm directory exists
+if (!fs.existsSync(baseFolder)) {
+    fs.mkdir(baseFolder, { recursive: true }, (err) => {
+        if (err) throw err;
+    });
+}
+
 // Generate the certificate name using the NPM package name
 const certificateName = process.env.npm_package_name;
 
