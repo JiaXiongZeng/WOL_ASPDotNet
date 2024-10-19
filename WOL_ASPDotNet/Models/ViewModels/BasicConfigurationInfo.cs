@@ -3,8 +3,18 @@
     public class BasicConfigurationInfo
     {
         /// <summary>
-        /// The web mstsc server url
+        /// The guacamole sharp web socket url
         /// </summary>
-        public string MstscHostURL { get; set; }
+        public string GuacamoleSharpWebSocket { get; set; }
+
+        /// <summary>
+        /// The guacamole sharp token url
+        /// </summary>
+        public string GuacamoleSharpTokenURL { get; set; }
+
+        /// <summary>
+        /// The guacamole sharp token phrase
+        /// </summary>
+        public string GuacamoleSharpTokenPhrase { get; set; }
     }
 }

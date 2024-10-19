@@ -32,6 +32,7 @@ import ConfigTable from '@components/ConfigTable';
 import MaintainHosts from '@components/MaintainHosts';
 import UserManagement from '@components/UserManagement';
 import UserProfile from '@components/UserProfile';
+import RemoteGateway from '@components/RemoteGateway';
 
 import axios from 'axios';
 import { MESSAGE_STATUS, ResponseMessage } from '@models/ResponseMessage';
@@ -234,6 +235,7 @@ export default function MenuAppBar() {
                     <Route path="/Maintain" element={<MaintainHosts />} />
                     <Route path="/Users" element={<UserManagement />} />
                     <Route path="/UserProfile" element={<UserProfile />} />
+                    <Route path="/RemoteGateway" element={<RemoteGateway />} />
                     <Route path="*" element={<HostList showAction={true} />} />
                 </Routes>
                 <Box

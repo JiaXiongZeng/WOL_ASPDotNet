@@ -2,5 +2,7 @@
     NetworkDevice: string,
     CacheExpirationTimespan: number
     CacheDumpTimespan: number,
-    MstscHostURL: string
-};
+    GuacamoleSharpWebSocket: string,
+    GuacamoleSharpTokenURL: string,
+    GuacamoleSharpTokenPhrase: string
+}

@@ -38,7 +38,9 @@ namespace WOL_ASPDotNet.Controllers
 
             var result = new BasicConfigurationInfo
             {
-                MstscHostURL = fullConfigs.MstscHostURL
+                GuacamoleSharpWebSocket = fullConfigs.GuacamoleSharpWebSocket,
+                GuacamoleSharpTokenURL = fullConfigs.GuacamoleSharpTokenURL,
+                GuacamoleSharpTokenPhrase = fullConfigs.GuacamoleSharpTokenPhrase
             };
 
             var respMsg = new ResponseMessage

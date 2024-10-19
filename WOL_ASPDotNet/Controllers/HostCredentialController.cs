@@ -94,6 +94,148 @@ namespace WOL_ASPDotNet.Controllers
             return Ok(result);
         }
 
+        [HttpGet]
+        public async Task<IActionResult> GetRDP([FromQuery] string macAddress)
+        {
+            var result = new ResponseMessage
+            {
+                Status = MESSAGE_STATUS.ERROR
+            };
+
+            try
+            {
+                var data = await this._hostCredentialRepository.GetAsync(macAddress);
+                if (data == null)
+                {
+                    result.Status = MESSAGE_STATUS.OK;
+                    return Ok(result);
+                }
+
+                var RDP_Passwrod = data.RDP_Password;
+
+                //Check if the private/public key pair exists
+                var keyPair = await this._keyRingRepository.GetHostCredentialKeyPairAsync(macAddress);
+                if (keyPair != null)
+                {
+                    this._cryptoUtility.ImportKeys(keyPair.PrivateKey, keyPair.PublicKey);
+                    RDP_Passwrod = (!string.IsNullOrEmpty(RDP_Passwrod) ?
+                                            this._cryptoUtility.Decrypt(RDP_Passwrod) : null);
+                }
+
+                var viewModel = new CredentialRdpViewModel
+                {
+                    Port = data.RDP_Port,
+                    Domain = data.RDP_Domain,
+                    UserName = data.RDP_UserName,
+                    Password = RDP_Passwrod
+                };
+
+                result.Status = MESSAGE_STATUS.OK;
+                result.Attachment = viewModel;
+            }
+            catch (Exception e)
+            {
+                result.Status = MESSAGE_STATUS.ERROR;
+                result.Message = e.Message;
+            }
+
+            return Ok(result);
+        }
+
+        [HttpGet]
+        public async Task<IActionResult> GetSSH([FromQuery] string macAddress)
+        {
+            var result = new ResponseMessage
+            {
+                Status = MESSAGE_STATUS.ERROR
+            };
+
+            try
+            {
+                var data = await this._hostCredentialRepository.GetAsync(macAddress);
+                if (data == null)
+                {
+                    result.Status = MESSAGE_STATUS.OK;
+                    return Ok(result);
+                }
+
+                var SSH_Password = data.SSH_Password;
+
+                //Check if the private/public key pair exists
+                var keyPair = await this._keyRingRepository.GetHostCredentialKeyPairAsync(macAddress);
+                if (keyPair != null)
+                {
+                    this._cryptoUtility.ImportKeys(keyPair.PrivateKey, keyPair.PublicKey);
+                    SSH_Password = (!string.IsNullOrEmpty(SSH_Password) ?
+                                            this._cryptoUtility.Decrypt(SSH_Password) : null);
+                }
+
+                var viewModel = new CredentialSshViewModel
+                {
+                    Port = data.SSH_Port,
+                    UserName = data.SSH_UserName,
+                    Password = SSH_Password
+                };
+
+                result.Status = MESSAGE_STATUS.OK;
+                result.Attachment = viewModel;
+            }
+            catch (Exception e)
+            {
+                result.Status = MESSAGE_STATUS.ERROR;
+                result.Message = e.Message;
+            }
+
+            return Ok(result);
+        }
+
+        [HttpGet]
+        public async Task<IActionResult> GetVNC([FromQuery] string macAddress)
+        {
+            var result = new ResponseMessage
+            {
+                Status = MESSAGE_STATUS.ERROR
+            };
+
+            try
+            {
+                var data = await this._hostCredentialRepository.GetAsync(macAddress);
+                if (data == null)
+                {
+                    result.Status = MESSAGE_STATUS.OK;
+                    return Ok(result);
+                }
+
+                var VNC_Password = data.VNC_Password;
+
+                //Check if the private/public key pair exists
+                var keyPair = await this._keyRingRepository.GetHostCredentialKeyPairAsync(macAddress);
+                if (keyPair != null)
+                {
+                    this._cryptoUtility.ImportKeys(keyPair.PrivateKey, keyPair.PublicKey);
+                    VNC_Password = (!string.IsNullOrEmpty(VNC_Password) ?
+                                            this._cryptoUtility.Decrypt(VNC_Password) : null);
+                }
+
+                var viewModel = new CredentialVncViewModel
+                {
+                    Port = data.VNC_Port,
+                    UserName = data.VNC_UserName,
+                    Password = VNC_Password
+                };
+
+                result.Status = MESSAGE_STATUS.OK;
+                result.Attachment = viewModel;
+            }
+            catch (Exception e)
+            {
+                result.Status = MESSAGE_STATUS.ERROR;
+                result.Message = e.Message;
+            }
+
+            return Ok(result);
+        }
+
         [HttpPut]
         public async Task<IActionResult> Update([FromBody] PutHostCredentialViewModel data)
         {

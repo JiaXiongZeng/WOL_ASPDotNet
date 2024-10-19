@@ -3,6 +3,7 @@
     forwardRef, useImperativeHandle,
     ReactNode
 } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useImmer } from 'use-immer';
 import { type HostViewModel } from 'models/HostViewModel';
 
@@ -47,7 +48,7 @@ import { ConfigContext } from '@components/ConfigContext';
 import ConnectionSettingsPanel, { ConnectionSettingsPanelHandler } from '@components/ConnectionSettingsPanel';
 import { HostCrendentialViewModel } from '@models/HostCredentialViewModel';
 
-import { submitForm } from '@utilities/FormUtility';
+//import { submitForm } from '@utilities/FormUtility';
 
 import { MESSAGE_STATUS, ResponseMessage } from '@models/ResponseMessage';
 import { ICMPEchoInfo } from '@models/ICMPEchoInfo';
@@ -76,9 +77,9 @@ const VNC = styled(VisibilityIcon)(() => ({
 }));
 
 const ConnActions = [
-    { icon: <RDP />, name: 'Remote Desktop Protocol (RDP)' },
-    { icon: <SSH />, name: 'Secure Shell (SSH)' },
-    { icon: <VNC />, name: 'Virtual Network Computing (VNC)' }
+    { type: "RDP", icon: <RDP />, name: 'Remote Desktop Protocol (RDP)' },
+    { type: "SSH", icon: <SSH />, name: 'Secure Shell (SSH)' },
+    { type: "VNC", icon: <VNC />, name: 'Virtual Network Computing (VNC)' }
 ];
 
 //Power off icon
@@ -124,6 +125,12 @@ const HostList = forwardRef<HostListHandler, HostListProp>((props, ref) => {
     const [isPingStart, setIsPingStart] = useState<boolean>(false);
 
     const connSettingsRef = useRef<ConnectionSettingsPanelHandler>(null);
+
+    const navigate = useNavigate();
+
+    const navigateTo = (route: string, state?: any) => {
+        navigate(route, { replace: true, state: state });
+    }
 
     /************************** Selection Feature Begin **************************/
     const [rowCount, setRowCount] = useState(0);
@@ -367,21 +374,7 @@ const HostList = forwardRef<HostListHandler, HostListProp>((props, ref) => {
                                                     (
                                                         row.PowerOn
                                                             ?
-                                                            //<Tooltip arrow title="Turn off PC via RDP" onClick={() => {
-                                                            //        const mstscURL = `${configs?.MstscHostURL}/`;
-                                                            //        const bodyData = {
-                                                            //            ip: row.IPv4,
-                                                            //            //domain: row.Domain,
-                                                            //            //userName: "RDP login account",
-                                                            //            //password: "RDP login password"
-                                                            //        };
-                                                            //        submitForm(mstscURL, bodyData, "_blank");
-                                                            //    }}>
-                                                            //        <IconButton>
-                                                            //            <PowerOn />
-                                                            //        </IconButton>
-                                                            //</Tooltip>
-                                                                <SpeedDial key={`SpeedDial_${row.MacAddress}`}
+                                                            <SpeedDial key={`SpeedDial_${row.MacAddress}`}
                                                                     role="button"
                                                                     ariaLabel={`Host ${row.HostName ?? row.IPv4} connect method`}
                                                                     icon={<SpeedDialIcon icon={<PowerOn />} />}
@@ -412,16 +405,26 @@ const HostList = forwardRef<HostListHandler, HostListProp>((props, ref) => {
                                                                                 role="button"
                                                                                 icon={action.icon}
                                                                                 tooltipTitle={action.name}
-                                                                                sx={{ pdding: "0px", margin: "0px", marginRight: "4px", marginTop: "4px" }}
+                                                                                sx={{ pdding: "0px", margin: "0px", marginRight: "4px"/*, marginTop: "4px"*/ }}
                                                                                 onClick={() => {
-                                                                                    const mstscURL = `${configs?.MstscHostURL}/`;
-                                                                                    const bodyData = {
-                                                                                        ip: row.IPv4,
-                                                                                        //domain: row.Domain,
-                                                                                        //userName: "RDP login account",
-                                                                                        //password: "RDP login password"
-                                                                                    };
-                                                                                    submitForm(mstscURL, bodyData, "_blank");
+                                                                                    //Get connection settings from DB
+                                                                                    axios.get<ResponseMessage<any>>(`/HostCredential/Get${action.type}`, {
+                                                                                        params: {
+                                                                                            macAddress: row.MacAddress
+                                                                                        }
+                                                                                    }).then(resp => {
+                                                                                        const respData = resp.data;
+                                                                                        if (respData.Status == MESSAGE_STATUS.OK) {
+                                                                                            navigateTo("/RemoteGateway", {
+                                                                                                Type: action.type,
+                                                                                                Ip: row.IPv4,
+                                                                                                GuacamoleSharpWebSocket: configs?.GuacamoleSharpWebSocket,
+                                                                                                GuacamoleSharpTokenURL: configs?.GuacamoleSharpTokenURL,
+                                                                                                GuacamoleSharpTokenPhrase: configs?.GuacamoleSharpTokenPhrase,
+                                                                                                ...respData.Attachment
+                                                                                            });
+                                                                                        }
+                                                                                    });                                                                       
                                                                                 }} />
                                                                         )
                                                                     }
