@@ -71,7 +71,9 @@ export const ConfigTable = () => {
             NetworkDevice: "Default",
             CacheExpirationTimespan: 30,
             CacheDumpTimespan: 1,
-            MstscHostURL: ''
+            GuacamoleSharpWebSocket: '',
+            GuacamoleSharpTokenURL: '',
+            GuacamoleSharpTokenPhrase: ''
         }
     });
 
@@ -117,11 +119,21 @@ export const ConfigTable = () => {
                     <Table sx={{ minWidth: 650 }} size="small">
                         <TableHead>
                             <MuiTableRow>
-                                <TableCell align="center" width="50%" >Variable</TableCell>
-                                <TableCell align="center" width="50%" >Value</TableCell>
+                                <TableCell align="center" width="40%" >Variable</TableCell>
+                                <TableCell align="center" width="60%" >Value</TableCell>
                             </MuiTableRow>
                         </TableHead>
-                        <TableBody>
+                        <TableBody sx={{
+                            "& td.MuiTableCell-root": {
+                                width: "100%"
+                            },
+                            "& td .MuiFormControl-root": {
+                                width: "inherit"
+                            },
+                            "& td .MuiInputBase-root:not(.MuiOutlinedInput-root)": {
+                                width: "100%"
+                            }
+                        }}>
                             <TableRow hover={true}>
                                 <TableCell align="center" component="th" scope="row">
                                     Network Device
@@ -177,12 +189,34 @@ export const ConfigTable = () => {
                             </TableRow>
                             <TableRow hover={true}>
                                 <TableCell align="center" component="th" scope="row">
-                                    Mstsc Host URL
+                                    Guacamole-Sharp Web Socket URL
                                 </TableCell>
                                 <TableCell align="left">
                                     <TextField
                                         variant="standard"
-                                        {...register("MstscHostURL", { /*setValueAs: defaultNull*/ })}
+                                        {...register("GuacamoleSharpWebSocket", { /*setValueAs: defaultNull*/ })}
+                                    />
+                                </TableCell>
+                            </TableRow>
+                            <TableRow hover={true}>
+                                <TableCell align="center" component="th" scope="row">
+                                    Guacamole-Sharp Token URL
+                                </TableCell>
+                                <TableCell align="left">
+                                    <TextField
+                                        variant="standard"
+                                        {...register("GuacamoleSharpTokenURL", { /*setValueAs: defaultNull*/ })}
+                                    />
+                                </TableCell>
+                            </TableRow>
+                            <TableRow hover={true}>
+                                <TableCell align="center" component="th" scope="row">
+                                    Guacamole-Sharp Token Phrase
+                                </TableCell>
+                                <TableCell align="left">
+                                    <TextField
+                                        variant="standard"
+                                        {...register("GuacamoleSharpTokenPhrase", { /*setValueAs: defaultNull*/ })}
                                     />
                                 </TableCell>
                             </TableRow>
@@ -209,12 +243,7 @@ export const ConfigTable = () => {
                         toggleElement(submitRef.current!);
                     }
                 }
-                ref={modalRef}  >
-                <Typography gutterBottom>
-                    Cras mattis consectetur purus sit amet fermentum. Cras justo odio,
-                    dapibus ac facilisis in, egestas eget quam. Morbi leo risus, porta ac
-                    consectetur ac, vestibulum at eros.
-                </Typography>
+                ref={modalRef} >
             </CustomizedDialog>
         </> 
     );

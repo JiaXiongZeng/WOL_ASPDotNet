@@ -10,12 +10,12 @@ namespace WOL_ASPDotNet.Repository.Implement
         private IDBConnectionHelper _dbConnHelp;
         public UserRepository(IDBConnectionHelper dbConnHelp)
         {
-            _dbConnHelp = dbConnHelp;
+            this._dbConnHelp = dbConnHelp;
         }        
 
         public async Task<UserDataModel> GetLocalAsync(string id, string pwd = null)
         {
-            using (var conn = _dbConnHelp.SQLite)
+            using (var conn = this._dbConnHelp.SQLite)
             {
                 string sql = @"SELECT * FROM User
                                WHERE LocalID = @LocalID 
@@ -41,7 +41,7 @@ namespace WOL_ASPDotNet.Repository.Implement
 
         public async Task<IEnumerable<UserDataModel>> GetUserInfoListAsync(IEnumerable<string> localIds = null)
         {
-            using (var conn = _dbConnHelp.SQLite)
+            using (var conn = this._dbConnHelp.SQLite)
             {
                 string sql = @"SELECT * FROM User";
 
@@ -60,7 +60,7 @@ namespace WOL_ASPDotNet.Repository.Implement
 
         public async Task<int> UpdateUserInfosAsync(IEnumerable<UserDataModel> userInfos)
         {
-            using (var conn = _dbConnHelp.SQLite)
+            using (var conn = this._dbConnHelp.SQLite)
             {
                 string sql = @"UPDATE User 
                                SET LocalPWD = @LocalPWD, 
@@ -78,7 +78,7 @@ namespace WOL_ASPDotNet.Repository.Implement
 
         public async Task<int> InsertUserInfosAsync(IEnumerable<UserDataModel> userInfos)
         {
-            using (var conn = _dbConnHelp.SQLite)
+            using (var conn = this._dbConnHelp.SQLite)
             {
                 string sql = @"INSERT INTO User (LocalID, LocalPWD, UserName, Email, Phone,
                                                  IsAdmin, Status, Createtime_LocalID)

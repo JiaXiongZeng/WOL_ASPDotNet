@@ -155,17 +155,77 @@ namespace WOL_ASPDotNet.Utilities.Implement
         /// <returns></returns>
         protected IPAddress GetNicIpv4Address()
         {
+            //if (_device == null)
+            //{
+            //    throw new ArgumentException("Must specify device first.");
+            //}
+
+            //var ipAddress = ((LibPcapLiveDevice)this._device).Interface
+            //                                 .Addresses.FirstOrDefault(x => x.Addr.ipAddress != null && 
+            //                                                                x.Addr.ipAddress.AddressFamily == AddressFamily.InterNetwork)
+            //                                 .Addr.ipAddress;
+
+            var details = GetAddressDetails();
+            var ipAddress = details.Ip;
+
+            return ipAddress;            
+        }
+
+        /// <summary>
+        /// 取得此裝置對應的IP詳細資訊
+        /// </summary>
+        /// <returns></returns>
+        protected NICAddresses GetAddressDetails()
+        {
             if (_device == null)
             {
                 throw new ArgumentException("Must specify device first.");
             }
 
-            var ipAddress = ((LibPcapLiveDevice)this._device).Interface
-                                             .Addresses.FirstOrDefault(x => x.Addr.ipAddress != null && 
-                                                                            x.Addr.ipAddress.AddressFamily == AddressFamily.InterNetwork)
-                                             .Addr.ipAddress;
+            var nicInterface = ((LibPcapLiveDevice)this._device).Interface;
+            var addresses = nicInterface
+                            .Addresses.FirstOrDefault(x => x.Addr.ipAddress != null &&
+                                                           x.Addr.ipAddress.AddressFamily == AddressFamily.InterNetwork);
+            var gateway = nicInterface.GatewayAddresses.FirstOrDefault();
 
-            return ipAddress;            
+
+            var result = new NICAddresses
+            {
+                Ip = addresses.Addr.ipAddress,
+                Gateway = (gateway != null ? gateway : addresses.Addr.ipAddress),
+                Mask = addresses.Netmask.ipAddress,
+                Broadcast = addresses.Broadaddr.ipAddress
+            };
+
+
+            byte[] gatewayBytes = result.Gateway.GetAddressBytes();
+            byte[] maskBytes = result.Mask.GetAddressBytes();
+            byte[] broadcastBytes = result.Broadcast.GetAddressBytes();
+            byte[] networkBytes = new byte[4];
+            for (int i = 0; i < 4; i++)
+            {
+                networkBytes[i] = (byte)(gatewayBytes[i] & maskBytes[i]);
+            }
+            result.Network = new IPAddress(networkBytes);
+
+
+            byte[] firstHostBytes = networkBytes;
+            byte[] lastHostBytes = broadcastBytes;
+
+            uint firstNumeric = BitConverter.ToUInt32(firstHostBytes.Reverse().ToArray(), 0);
+            uint lastNumeric = BitConverter.ToUInt32(lastHostBytes.Reverse().ToArray(), 0);
+
+            firstNumeric += 1;
+            lastNumeric -= 1;
+
+
+            byte[] realFirstHostBytes = BitConverter.GetBytes(firstNumeric).Reverse().ToArray();
+            byte[] realLastHostBytes = BitConverter.GetBytes(lastNumeric).Reverse().ToArray();
+
+            result.UsableFrom = new IPAddress(realFirstHostBytes);
+            result.UsableTo = new IPAddress(realLastHostBytes);
+
+            return result;
         }
 
         /// <summary>
@@ -199,5 +259,22 @@ namespace WOL_ASPDotNet.Utilities.Implement
                 this._isDisposed = true;
             }
         }
+    }
+
+    public class NICAddresses
+    {
+        public IPAddress Ip { get; set; }
+
+        public IPAddress Network { get; set; }
+
+        public IPAddress Gateway { get; set; }
+
+        public IPAddress Mask { get; set; }
+        
+        public IPAddress Broadcast { get; set; }
+
+        public IPAddress UsableFrom { get; set; }
+
+        public IPAddress UsableTo { get; set; }
     }
 }

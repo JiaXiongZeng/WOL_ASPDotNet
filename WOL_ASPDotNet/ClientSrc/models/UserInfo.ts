@@ -5,4 +5,4 @@
     Email: Nullable<string>,
     Phone: Nullable<string>,
     IsAdmin: boolean
-};
+}

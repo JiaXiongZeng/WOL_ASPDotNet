@@ -25,8 +25,8 @@ export const AuthenticationRequired = () => {
     const navigate = useNavigate();
 
     useEffect(() => {
-        var identityProcess: any;
-        var configProcess: any;
+        let identityProcess: any;
+        let configProcess: any;
 
         //If reload whole page from server, checking session state first
         if (!serverAuth) {

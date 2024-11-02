@@ -9,6 +9,8 @@ import Typography from '@mui/material/Typography';
 import IconButton from '@mui/material/IconButton';
 import MenuIcon from '@mui/icons-material/Menu';
 import AccountCircle from '@mui/icons-material/AccountCircle';
+import PublicIcon from '@mui/icons-material/Public';
+
 import MenuItem from '@mui/material/MenuItem';
 import Menu from '@mui/material/Menu';
 
@@ -18,6 +20,7 @@ import ListItemButton from '@mui/material/ListItemButton';
 import ListItemIcon from '@mui/material/ListItemIcon';
 import ListItemText from '@mui/material/ListItemText';
 
+import EnergySavingsLeafIcon from '@mui/icons-material/EnergySavingsLeaf';
 import Toolbar from '@mui/material/Toolbar';
 import Divider from '@mui/material/Divider';
 import ComputerIcon from '@mui/icons-material/Computer';
@@ -29,6 +32,7 @@ import ConfigTable from '@components/ConfigTable';
 import MaintainHosts from '@components/MaintainHosts';
 import UserManagement from '@components/UserManagement';
 import UserProfile from '@components/UserProfile';
+import RemoteGateway from '@components/RemoteGateway';
 
 import axios from 'axios';
 import { MESSAGE_STATUS, ResponseMessage } from '@models/ResponseMessage';
@@ -89,16 +93,33 @@ export default function MenuAppBar() {
                         >
                             <MenuIcon />
                         </IconButton>
-                        <Typography variant="h6" component="div" sx={{ flexGrow: 1, cursor: "pointer" }}
-                            onClick={(_e) => {
+                        <Box component="div"
+                            sx={{
+                                display: "inline-flex",
+                                alignItems: "center",
+                                flexGrow: 1
+                            }} >
+                            <IconButton sx={{
+                                color: "inherit",                                
+                                borderRadius: "0",
+                                "&:hover": {
+                                    backgroundColor: 'transparent'
+                                }
+                            }} onClick={(_e) => {
                                 navigateTo("/");
                             }}>
-                            WOL ASP.NET Core
-                        </Typography>
-                        <Typography>
+                                <EnergySavingsLeafIcon fontSize="large" sx={{ marginRight: "5px" }} />
+                                <Typography variant="h6" component="div">WOL ASP.NET Core</Typography>
+                            </IconButton>
+                        </Box>
+                        <Typography component="div"
+                            sx={{
+                                display: "inline-flex",
+                                maxWidth: "fit-content"
+                            }}>
                             {userInfo && userInfo.UserName}
                         </Typography>
-                        <div>
+                        <Box>
                             <IconButton
                                 size="large"
                                 aria-label="account of current user"
@@ -138,7 +159,7 @@ export default function MenuAppBar() {
                                         responseType: "json"
                                     }).then(resp => {
                                         const respData = resp.data;
-                                        if (respData.Status = MESSAGE_STATUS.OK) {
+                                        if (respData.Status == MESSAGE_STATUS.OK) {
                                             dispatch!({
                                                 actionKind: AuthActionKind.CLEAR,
                                                 args: null
@@ -149,7 +170,7 @@ export default function MenuAppBar() {
                                     });
                                 }}>Log out</MenuItem>
                             </Menu>
-                        </div>
+                        </Box>
                         
                     </Toolbar>
                 </AppBar>
@@ -214,8 +235,40 @@ export default function MenuAppBar() {
                     <Route path="/Maintain" element={<MaintainHosts />} />
                     <Route path="/Users" element={<UserManagement />} />
                     <Route path="/UserProfile" element={<UserProfile />} />
+                    <Route path="/RemoteGateway" element={<RemoteGateway />} />
                     <Route path="*" element={<HostList showAction={true} />} />
                 </Routes>
+                <Box
+                    sx={{
+                        display: "flex",
+                        justifyContent: "center",
+                        alignItems : "center",
+                        position: "fixed",
+                        padding: "0",
+                        paddingBottom: "2px",
+                        paddingLeft: "24px",
+                        paddingRight: "24px",
+                        bottom: "0",
+                        left: "0",
+                        right: "0",
+                        width: "100vw",
+                        backgroundColor: "#FFFFFF",
+                        pointerEvents: "none",
+                        zIndex: "1060"
+                    }}
+                >
+                    <PublicIcon color="primary" />
+                    <Typography component="span" variant="body2" color="primary"
+                        sx={{
+                            marginRight: "0.5em",
+                            marginLeft: "0.5em"
+                        }} >
+                        Let's help animals and our Earth from suffering.
+                    </Typography>
+                    <Typography component="span" variant="body2" color="primary">
+                        Just turn off your hosts when no need to use.
+                    </Typography>
+                </Box>
             </Box>        
         </>        
     );

@@ -18,9 +18,19 @@
         public int? CacheDumpTimespan { get; set; } = 1;
 
         /// <summary>
-        /// The web mstsc server url
+        /// The guacamole web socket url
         /// </summary>
-        public string MstscHostURL { get; set; }
+        public string GuacamoleSharpWebSocket { get; set; }
+
+        /// <summary>
+        /// The guacamole sharp token url
+        /// </summary>
+        public string GuacamoleSharpTokenURL { get; set; }
+
+        /// <summary>
+        /// The guacamole sharp token phrase
+        /// </summary>
+        public string GuacamoleSharpTokenPhrase { get; set; }
 
         public bool Equals(ConfigurationInfo other)
         {
@@ -39,7 +49,12 @@
                 return false;
             }
 
-            if (this.MstscHostURL != other.MstscHostURL)
+            if (this.GuacamoleSharpWebSocket != other.GuacamoleSharpWebSocket) 
+            {
+                return false;
+            }
+
+            if (this.GuacamoleSharpTokenPhrase != other.GuacamoleSharpTokenPhrase)
             {
                 return false;
             }

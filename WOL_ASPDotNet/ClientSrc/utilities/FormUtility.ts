@@ -7,6 +7,19 @@ export const defaultNull = (val: any) => {
     return val;
 }
 
+export const NumericValue = (val: any) => {
+    if (lodash.isString(val) && lodash.isEmpty(val)) {
+        return null;
+    }
+
+    const portNum = parseInt(val);
+    if (isNaN(portNum)) {
+        return null;
+    }
+
+    return portNum;
+}
+
 export const removeEmptyFields = (data: any) => {
     Object.keys(data).forEach(key => {
         if (data[key] === '' || data[key] == null) {

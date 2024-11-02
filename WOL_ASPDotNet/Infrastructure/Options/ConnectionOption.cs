@@ -3,5 +3,7 @@
     public class ConnectionOption
     {
         public string SQLite { get; set; }
+
+        public string KeyRing { get; set; }
     }
 }

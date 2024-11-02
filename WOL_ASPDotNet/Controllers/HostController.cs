@@ -51,6 +51,8 @@ namespace WOL_ASPDotNet.Controllers
         [HttpGet]
         public async Task<IActionResult> SniffHostsOnNetwork()
         {
+            await Task.Yield();
+
             if (!_arpSniffer.IsDeviceSet)
             {
                 string deviceId = NamedTimerService.CurrentConfiguration.NetworkDevice; //await this._configRep.GetNetworkDeviceID();

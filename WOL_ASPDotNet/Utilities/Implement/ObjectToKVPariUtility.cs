@@ -167,6 +167,11 @@ namespace WOL_ASPDotNet.Utilities.Implement
             {
                 var propInfos = objType.GetProperties();
                 var prop = propInfos.FirstOrDefault(x => x.Name == currentToken);
+                //KeyName不存在Model屬性Names中，則跳脫
+                if (prop == null)
+                {
+                    return;
+                }
 
                 //檢查是不是Token路徑的最後一層，若是則設定屬性值
                 if (tokens.Length == (depth + 1))

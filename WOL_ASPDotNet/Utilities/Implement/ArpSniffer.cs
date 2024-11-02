@@ -183,21 +183,6 @@ namespace WOL_ASPDotNet.Utilities.Implement
         /// </summary>
         public void SendArpBroadcast()
         {
-            // Get the local IP address and subnet mask
-            //var ipHostEntry = Dns.GetHostEntry(Dns.GetHostName());
-            //var ipAddress = ipHostEntry.AddressList[0]; // Choose the first IP address
-            //var subnetMask = GetSubnetMask(ipAddress);
-
-            var ipAddress = GetNicIpv4Address();
-            var subnetMask = GetSubnetMask(ipAddress);
-
-            // Extract network portion of IP address
-            var networkBytes = new byte[4];
-            for (int i = 0; i < 4; i++)
-            {
-                networkBytes[i] = (byte)(ipAddress.GetAddressBytes()[i] & subnetMask[i]);
-            }
-
             // Get the valid records from cached host list
             var validCacheHosts = this._cacheHostRep.GetValidOnes().GetAwaiter().GetResult();
 
@@ -231,13 +216,21 @@ namespace WOL_ASPDotNet.Utilities.Implement
             // Iterate over all IP addresses in the local subnet
             // If the IP exists in cache, don't try to broadcast again.
             var validIPv4Addrs = validCacheHosts.Select(x => x.IPv4);
-            for (int i = 1; i <= 254; i++) // Assuming /24 subnet
-            {
-                var IPv4Bytes = new byte[] { networkBytes[0], networkBytes[1], networkBytes[2], (byte)i };
 
-                if (!validIPv4Addrs.Contains(string.Join(".", IPv4Bytes)))
+            var details = GetAddressDetails();
+            byte[] startBytes = details.UsableFrom.GetAddressBytes();
+            byte[] endBytes = details.UsableTo.GetAddressBytes();
+
+            uint startNumeric = BitConverter.ToUInt32(startBytes.Reverse().ToArray(), 0);
+            uint endNumeric = BitConverter.ToUInt32(endBytes.Reverse().ToArray(), 0);
+
+            for (uint i = startNumeric; i <= endNumeric; i++)
+            {
+                // Convert the numeric value back to an IP address
+                byte[] ipBytes = BitConverter.GetBytes(i).Reverse().ToArray();
+                if (!validIPv4Addrs.Contains(string.Join(".", ipBytes)))
                 {
-                    var targetIpAddress = new IPAddress(IPv4Bytes);
+                    var targetIpAddress = new IPAddress(ipBytes);
                     SendArpRequest(targetIpAddress);
                 }
             }

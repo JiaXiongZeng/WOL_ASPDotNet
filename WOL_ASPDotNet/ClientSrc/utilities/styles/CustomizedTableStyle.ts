@@ -24,7 +24,6 @@ export const TableRow = styled(MuiTableRow)((/*{ theme }*/) => ({
     }
 }));
 
-
 export default {
     TableHead,
     TableRow
