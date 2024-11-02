@@ -243,7 +243,7 @@ export default function MenuAppBar() {
                         display: "flex",
                         justifyContent: "center",
                         alignItems : "center",
-                        position: "absolute",
+                        position: "fixed",
                         padding: "0",
                         paddingBottom: "2px",
                         paddingLeft: "24px",
@@ -253,7 +253,8 @@ export default function MenuAppBar() {
                         right: "0",
                         width: "100vw",
                         backgroundColor: "#FFFFFF",
-                        pointerEvents: "none"
+                        pointerEvents: "none",
+                        zIndex: "1060"
                     }}
                 >
                     <PublicIcon color="primary" />
