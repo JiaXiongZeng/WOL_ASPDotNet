@@ -1,22 +1,21 @@
-﻿import { useState, useEffect } from 'react';
+﻿import {
+    useState, useEffect, useRef,
+    forwardRef, useImperativeHandle
+} from 'react';
 
+import { useImmer } from 'use-immer';
 
 import { styled } from '@mui/material/styles';
 import Grid from '@mui/material/Grid';
 import Paper from '@mui/material/Paper';
 import Box from '@mui/material/Box';
 import Stack from '@mui/material/Stack';
-import Link from '@mui/material/Link';
 import Typography from '@mui/material/Typography';
-import Breadcrumbs from '@mui/material/Breadcrumbs';
+
 import IconButton from '@mui/material/IconButton';
 import Tooltip from '@mui/material/Tooltip';
 import LinearProgress, { LinearProgressProps } from '@mui/material/LinearProgress';
 import Badge from '@mui/material/Badge';
-
-import { SimpleTreeView } from '@mui/x-tree-view/SimpleTreeView';
-import { TreeItem } from '@mui/x-tree-view/TreeItem';
-
 
 import CreateNewFolderIcon from '@mui/icons-material/CreateNewFolder';
 import DriveFileMoveIcon from '@mui/icons-material/DriveFileMove';
@@ -25,6 +24,17 @@ import KeyboardDoubleArrowLeftIcon from '@mui/icons-material/KeyboardDoubleArrow
 import KeyboardDoubleArrowRightIcon from '@mui/icons-material/KeyboardDoubleArrowRight';
 import FileUploadIcon from '@mui/icons-material/FileUpload';
 import FileDownloadIcon from '@mui/icons-material/FileDownload';
+
+import { TreeViewBaseItem } from '@mui/x-tree-view/models';
+
+import { FileRichSelector, ExtendedTreeItemProps, FileRichSelectorRef, FileType, ItemInfo } from '@components/FileRichSelector';
+import { FileBreadcrumbs } from '@components/FileBreadcumbs';
+
+import * as lodash from 'lodash';
+
+import '@extensions/ExtTreeViewBaseItem.d';
+
+import { SwitchCase, conditionObj } from '@utilities/SwitchCaseUtility';
 
 
 const RectIconButton = styled(IconButton)(() => ({
@@ -49,56 +59,149 @@ const LinearProgressWithLabel = (props: LinearProgressProps & { value: number })
     );
 }
 
-const renderBreadcrumbs = (path: string[], handlePathChange: (f: string) => void) => {
-    const breadcrumbLinks = path.map((folder, index) => {
-        const isLast = index === path.length - 1;
-        const link = isLast ? (
-            <Typography key={index} color="text.primary">{folder}</Typography>
-        ) : (
-            <Link
-                key={index}
-                color="inherit"
-                onClick={() => handlePathChange(folder)}
-                style={{ cursor: 'pointer' }}
-            >
-                {folder}
-            </Link>
-        );
-        return link;
-    });
+export const getFileExt = (fileName: string) => {
+    const lastIdxOfDot = fileName.lastIndexOf('.');
+    let ext = "";
+    if (lastIdxOfDot != -1) {
+        ext = fileName.substring(lastIdxOfDot + 1, fileName.length - 1);
+    } else {
+        if (fileName.includes(':')) {
+            ext = fileName;
+        }
+    }
+    return ext;
+}
 
-    return (
-        <Breadcrumbs maxItems={4} itemsBeforeCollapse={0} itemsAfterCollapse={4}
-            sx={{
-                '& .MuiBreadcrumbs-separator': {
-                    marginLeft: '2px',
-                    marginRight: '2px'
-                },
-                paddingLeft: '8px',
-                paddingRight: '8px'
-            }} >
-            {breadcrumbLinks}
-        </Breadcrumbs>
-    );
-};
+export const judgeFileType = (ext: string, isFolder: boolean): FileType => {
+    let result: FileType  = 'others';
 
-export const FileExplorer = () => {
+    if (ext.includes(':') || ext.includes('/')) {
+        result = 'storage';
+        return result;
+    }
+
+    if (isFolder) {
+        result = 'folder';
+        return result;
+    }
+
+    result = SwitchCase(() => {
+        const imagePredicate = (): FileType => 'image';
+        const result: conditionObj<string, FileType> = {
+            cases: {
+                'pdf': () => 'pdf',
+                'doc': () => 'doc',
+                'folder': () => 'folder',
+                'jpg': imagePredicate,
+                'jpeg': imagePredicate,
+                'gif': imagePredicate,
+                'png': imagePredicate,
+                'bmp': imagePredicate,
+                'svg': imagePredicate
+            },
+            defaultCase: () => 'others'
+        }
+        return result;
+    })(ext);
+
+    return result;
+}
+
+export interface FileExplorerProps {
+    localFsRootName: string,
+    remoteFsRootName: string,
+    onRemoteItemToggled?: (itemInfo: ItemInfo) => void,
+    onLocalItemToggled?: (itemInfo: ItemInfo) => void
+}
+
+export type FileExplorerRef = {
+    renewLocalFsNodes: (rowFilePathes: Record<string, string>) => void,
+    renewRemoteFsNodes: (rowFilePathes: Record<string, string>) => void,
+    getLocalFsNodes: () => TreeViewBaseItem<ExtendedTreeItemProps>[],
+    getRemoteFsNodes: () => TreeViewBaseItem<ExtendedTreeItemProps>[]
+}
+
+export const FileExplorer = forwardRef<FileExplorerRef, FileExplorerProps>((props, ref) => {
     const transferPanelHeight = 30;
-    const [localPath, setLocalPath] = useState(['Local']);
-    const [remotePath, setRemotePath] = useState(['Remote']);
+    const { localFsRootName, remoteFsRootName, onLocalItemToggled, onRemoteItemToggled } = props;
 
+    const refLocalFileExplorer = useRef<FileRichSelectorRef>(null);
+    const refRemoteFileExporer = useRef<FileRichSelectorRef>(null);
+
+
+    //Root Pathes
+    const [localPath, setLocalPath] = useState(localFsRootName);
+    const [remotePath, setRemotePath] = useState(remoteFsRootName);
+
+    //Data Transfer Progress
     const [upProgress, setUpProgress] = useState(10);
+    const [downProgress, setDownProgress] = useState(10);
+
+    const [localFsNodes, setLocalFsNodes] = useImmer<TreeViewBaseItem<ExtendedTreeItemProps>[]>([]);
+    const [remoteFsNodes, setRemoteFsNodes] = useImmer<TreeViewBaseItem<ExtendedTreeItemProps>[]>([]);
 
 
+    const loadLocalFileSystemNodes = () => {
+        const result: TreeViewBaseItem<ExtendedTreeItemProps>[] = [
+            {
+                id: '1',
+                label: 'Documents',
+                children: [
+                    {
+                        id: '1.1',
+                        label: 'Company',
+                        children: [
+                            { id: '1.1.1', label: 'Invoice', fileType: 'pdf' },
+                            { id: '1.1.2', label: 'Meeting notes', fileType: 'doc' },
+                            { id: '1.1.3', label: 'Tasks list', fileType: 'doc' },
+                            { id: '1.1.4', label: 'Equipment', fileType: 'pdf' },
+                            { id: '1.1.5', label: 'Video conference', fileType: 'video' },
+                        ],
+                    },
+                    { id: '1.2', label: 'Personal', fileType: 'folder' },
+                    { id: '1.3', label: 'Group photo', fileType: 'image' },
+                ],
+            },
+            {
+                id: '2',
+                label: 'Bookmarked',
+                fileType: 'pinned',
+                children: [
+                    { id: '2.1', label: 'Learning materials', fileType: 'folder' },
+                    {
+                        id: '2.2',
+                        label: 'News',
+                        fileType: 'folder',
+                        children: [
+                            { id: '2.2.1', label: 'Invoice', fileType: 'others' },
+                            { id: '2.2.2', label: 'Meeting notes', fileType: 'others' },
+                            { id: '2.2.3', label: 'Tasks list', fileType: 'doc' },
+                            { id: '2.2.4', label: 'Equipment', fileType: 'pdf' },
+                            { id: '2.2.5', label: 'Video conference', fileType: 'video' },
+                        ]
+                    },
+                    { id: '2.3', label: 'Forums', fileType: 'folder' },
+                    { id: '2.4', label: 'Travel documents', fileType: 'pdf' },
+                ],
+            },
+            { id: '3', label: 'History', fileType: 'folder' },
+            { id: '4', label: 'Trash', fileType: 'trash' },
+        ];
 
+        return result;
+    }
 
-    const handleLocalPathChange = (newPath: string) => {
-        setLocalPath([...localPath, newPath]);
-    };
+    const loadRemoteFileSystemNodes = () => {
+        const result: TreeViewBaseItem<ExtendedTreeItemProps>[] = [
+            //{
+            //    id: '/',
+            //    label: '/',
+            //    fileType: 'storage'
+            //}
+        ];
 
-    const handleRemotePathChange = (newPath: string) => {
-        setRemotePath([...remotePath, newPath]);
-    };
+        return result;
+    }
 
     const handleUpload = () => {
         console.log("Upload initiated!");
@@ -112,6 +215,7 @@ export const FileExplorer = () => {
     useEffect(() => {
         const timer = setInterval(() => {
             setUpProgress((prevProgress) => (prevProgress >= 100 ? 10 : prevProgress + 10));
+            setDownProgress((prevProgress) => (prevProgress >= 100 ? 10 : prevProgress + 10));
         }, 800);
         return () => {
             clearInterval(timer);
@@ -119,6 +223,67 @@ export const FileExplorer = () => {
     }, []);
 
 
+    //Initialization
+    useEffect(() => {
+        //Load default file system tree from local host
+        const localNodes = loadLocalFileSystemNodes();
+        setLocalFsNodes(localNodes);
+
+        //Load default file system tree from remote host
+        const remoteNodes = loadRemoteFileSystemNodes();
+        setRemoteFsNodes(remoteNodes);
+    }, []);
+
+    useImperativeHandle(ref, () => ({
+        renewLocalFsNodes: (_rowFilePathes: Record<string, string>) => {
+
+        },
+        renewRemoteFsNodes: (rowFilePathes: Record<string, string>) => {
+            lodash.forEach(rowFilePathes, (metaType, path) => {
+                const tokens = path.split('/');
+                const fileName = lodash.last(tokens)!;
+                const parentPath = path.substring(0, path.length - fileName.length - 1);
+                const isFolder = (metaType.indexOf('stream-index+json') != -1);
+
+                //Expand the nodes retrived from remote host
+                setRemoteFsNodes(draft => {
+                    const findNodes = draft.findItemsByIds([path]);
+                    if (findNodes.length == 0) {                        
+                        const parentNodes = draft.findItemsByIds([parentPath]);
+                        if (parentNodes.length == 0) {
+                            //Create new node under root node
+                            draft.push({
+                                id: path,
+                                label: fileName,
+                                fileType: judgeFileType(getFileExt(fileName), isFolder)
+                            });
+                        } else {
+                            //Create new node under specific parent node
+                            const theParentNode = parentNodes[0];
+                            if (!theParentNode.children) {
+                                theParentNode.children = [];
+                            }
+
+                            const isExist = lodash.some(theParentNode.children, x => x.id == path);
+                            if (!isExist) {
+                                theParentNode.children.push({
+                                    id: path,
+                                    label: fileName,
+                                    fileType: judgeFileType(getFileExt(fileName), isFolder)
+                                });
+                            }
+                        }
+                    }
+                });
+            });
+        },
+        getLocalFsNodes: () => {
+            return localFsNodes;
+        },
+        getRemoteFsNodes: () => {
+            return remoteFsNodes;
+        }
+    }), [ localFsNodes, remoteFsNodes ]);
 
     return (
         <>
@@ -145,25 +310,19 @@ export const FileExplorer = () => {
                                 </IconButton>
                             </Box>
                         </Box>
-                        {renderBreadcrumbs(localPath, handleLocalPathChange)}
-                        <SimpleTreeView sx={{ height: `${transferPanelHeight}vh`, maxHeight: `${transferPanelHeight}vh`, overflow: 'auto' }}>
-                            <TreeItem itemId="1" label="Folder A">
-                                <TreeItem itemId="2" label="Subfolder A1" onClick={() => handleLocalPathChange('Subfolder A1')} />
-                                <TreeItem itemId="3" label="Subfolder A2" onClick={() => handleLocalPathChange('Subfolder A2')} />
-                            </TreeItem>
-                            <TreeItem itemId="4" label="Folder B">
-                                <TreeItem itemId="5" label="File B1.txt" />
-                            </TreeItem>
-                            <TreeItem itemId="6" label="Folder C">
-                                <TreeItem itemId="7" label="File C1.txt" />
-                                <TreeItem itemId="6-1" label="Folder C-1">
-                                    <TreeItem itemId="6-1-1" label="File C-1-1.txt" />
-                                </TreeItem>
-                            </TreeItem>
-                            <TreeItem itemId="8" label="Folder D">
-                                <TreeItem itemId="9" label="File D1.txt" />
-                            </TreeItem>
-                        </SimpleTreeView>
+                        <FileBreadcrumbs path={localPath} handlePathChange={(_e, _newPath) => {
+                            //console.log(newPath);
+                        }} />
+                        <FileRichSelector
+                            nodes={localFsNodes}
+                            onItemToggled={(itemInfo) => {
+                                onLocalItemToggled && onLocalItemToggled(itemInfo);
+
+                                //Response to the breadcrumbs against to the RichFileSelector
+                                setLocalPath(itemInfo.path);
+                            }}
+                            ref={refLocalFileExplorer}
+                            sx={{ height: `${transferPanelHeight}vh`, maxHeight: `${transferPanelHeight}vh`, overflow: 'auto' }} />
                     </Paper>
                 </Grid>
 
@@ -205,16 +364,26 @@ export const FileExplorer = () => {
                                 </IconButton>
                             </Box>
                         </Box>                        
-                        {renderBreadcrumbs(remotePath, handleRemotePathChange)}
-                        <SimpleTreeView sx={{ height: `${transferPanelHeight}vh`, maxHeight: `${transferPanelHeight}vh`, overflow: 'auto' }}>
-                            <TreeItem itemId="6" label="Folder C">
-                                <TreeItem itemId="7" label="Subfolder C1" onClick={() => handleRemotePathChange('Subfolder C1')} />
-                                <TreeItem itemId="8" label="Subfolder C2" onClick={() => handleRemotePathChange('Subfolder C2')} />
-                            </TreeItem>
-                            <TreeItem itemId="9" label="Folder D">
-                                <TreeItem itemId="10" label="File D1.txt" />
-                            </TreeItem>
-                        </SimpleTreeView>
+                        <FileBreadcrumbs path={remotePath} handlePathChange={(e, newPath) => {
+                            //console.log(newPath);
+                            refRemoteFileExporer.current?.setItemFocused(e, newPath);
+
+                            //Scroll to the clicked item
+                            setTimeout(() => {
+                                const currentItemDOM = refRemoteFileExporer.current?.getFocusedItemDOM(newPath);
+                                currentItemDOM?.scrollIntoView({ behavior: "smooth" });
+                            }, 200);
+                        }} />
+                        <FileRichSelector
+                            nodes={remoteFsNodes}
+                            onItemToggled={(itemInfo) => {                                
+                                onRemoteItemToggled && onRemoteItemToggled(itemInfo);
+
+                                //Response to the breadcrumbs against to the RichFileSelector
+                                setRemotePath(itemInfo.path);
+                            }}
+                            ref={refRemoteFileExporer}
+                            sx={{ height: `${transferPanelHeight}vh`, maxHeight: `${transferPanelHeight}vh`, overflow: 'auto' }} />
                     </Paper>
                 </Grid>
             </Grid>
@@ -242,12 +411,12 @@ export const FileExplorer = () => {
                         </Stack>
                     </Grid>
                     <Grid item xs={9} >
-                        <LinearProgressWithLabel value={upProgress} />
+                        <LinearProgressWithLabel value={downProgress} />
                     </Grid>
                 </Grid>
             </Stack>
         </>
     );
-};
+});
 
 export default FileExplorer;

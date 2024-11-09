@@ -17,8 +17,11 @@ import FileCopyIcon from '@mui/icons-material/FileCopy';
 
 import { FullScreen, useFullScreenHandle } from "react-full-screen";
 import CustomizedDialog, { CustomizedDialogHandler } from '@components/CustomizedDialog';
-import { FileExplorer } from '@components/FileExplorer';
+import { FileExplorer, FileExplorerRef } from '@components/FileExplorer';
 import { GatewayParametersViewModel } from '@models/GatewayParametersViewModel';
+
+//import { TreeViewBaseItem } from '@mui/x-tree-view/models';
+//import { ExtendedTreeItemProps } from '@components/FileRichSelector';
 
 import axios from 'axios';
 import * as lodash from 'lodash';
@@ -87,9 +90,14 @@ const StyledPopper = styled(Popper)(({ theme }) => ({ // You can replace with `P
     },
 }));
 
-const base64ToBlob = (base64String: string, mimeType: string) => {
+const base64ToByteCharacters = (base64String: string) => {
     const base64WithoutPrefix = base64String.split(',')[1] || base64String;
-    const byteCharacters = atob(base64WithoutPrefix);
+    const result = atob(base64WithoutPrefix);
+    return result;
+}
+
+const base64ToBlob = (base64String: string, mimeType: string) => {
+    const byteCharacters = base64ToByteCharacters(base64String);
     const byteNumbers = new Uint8Array(byteCharacters.length);
 
     for (let i = 0; i < byteCharacters.length; i++) {
@@ -125,6 +133,7 @@ const RemoteGateway = () => {
         navigate(route, { replace: true });
     }
 
+    const refFileExplorer = useRef<FileExplorerRef>(null);
     const refIsConfirmDisconnect = useRef<boolean>(false);
     const refTunnel = useRef<Nullable<Guacamole.Tunnel>>(null);
     const refClient = useRef<Nullable<Guacamole.Client>>(null);
@@ -199,29 +208,22 @@ const RemoteGateway = () => {
             }
         }
 
-        client.onfilesystem = async (object, name) => {
+        client.onfilesystem = async (object, _name) => {
             refFileSystem.current = object;
 
-            object.onbody = (inStream, mimeType) => {
+            object.onbody = (inStream, _mimeType) => {
                 inStream.sendAck("OK", Guacamole.Status.Code.SUCCESS);
-                console.log(inStream);
-                console.log(mimeType);
-                console.log(name);
 
                 inStream.onblob = (data) => {
-                    //console.log(data);
-                    const blob = base64ToBlob(data, mimeType);
-                    console.log(blob);
+                    const fileList: { [key: string]: string } = JSON.parse(base64ToByteCharacters(data));
+                    refFileExplorer.current?.renewRemoteFsNodes(fileList);
 
+                    //Notify GUAC the blob is received successfully
                     inStream.sendAck("OK", Guacamole.Status.Code.SUCCESS);
                 }
 
                 inStream.onend = () => {
-                    if (mimeType.indexOf('stream-index+json') != -1) {
-                        //代表是資料夾，向下鑽取 (可以用成UI表示)
-                    } else {
-                        //代表是檔案，可以下載或進行刪除
-                    }
+                    //console.log("The stream is closed");
                 }
             }
         }
@@ -390,11 +392,23 @@ const RemoteGateway = () => {
                         <CustomizedDialog
                             title="Data Transfer"
                             open={false}
-                            showClose={true}                            
+                            showClose={true}
                             maxWidth="md"
                             fullWidth={true}
                             ref={modalRef} >
-                            <FileExplorer />
+                            <FileExplorer
+                                localFsRootName="/"
+                                remoteFsRootName="/"
+                                onLocalItemToggled={(_itemInfo) => {
+                                    //console.log(itemInfo);
+                                }}
+                                onRemoteItemToggled={(itemInfo) => {
+                                    //console.log(itemInfo);
+                                    if (itemInfo.fileType == "storage" || itemInfo.fileType == "folder") {
+                                        refFileSystem.current?.requestInputStream(itemInfo.path);
+                                    }
+                                }}
+                                ref={refFileExplorer} />
                         </CustomizedDialog>
                     </FullScreen>                    
                     <StyledPopper
@@ -474,8 +488,7 @@ const RemoteGateway = () => {
                                         }
                                         <Tooltip arrow title="File transfer" onClick={() => {
                                             //從根目錄 / 開始向Guacamole詢問路徑是否為檔案或目錄
-                                            /*let path = `/`;
-                                            refFileSystem.current?.requestInputStream(path);*/
+                                            refFileSystem.current?.requestInputStream('/');
                                             modalRef.current?.setOpen(true);
                                         }} >
                                             <IconButton>
