@@ -33,18 +33,18 @@ export const FileBreadcrumbs = (props: {
     const breadcrumbLinks = infoList.map((info, index) => {
         const isLast = index === infoList.length - 1;
         const link = isLast ? (
-            <Box sx={{
+            <Box key={`${index}_${info.path}`} sx={{
                 bgcolor: 'warning.light',
                 borderRadius: 1,
                 paddingLeft: '8px',
                 paddingRight: '8px'
             }}>
-                <Typography variant="button" key={info.path} color="text.secondary" >{info.label}</Typography>
+                <Typography variant="button" color="text.secondary" >{info.label}</Typography>
             </Box>
         ) : (
             <Link
                 variant="button"
-                key={info.path}
+                key={`${index}_${info.path}`}
                 color="inherit"
                 onClick={(e) => { handlePathChange(e, info.path) }}
                 style={{ cursor: 'pointer' }}

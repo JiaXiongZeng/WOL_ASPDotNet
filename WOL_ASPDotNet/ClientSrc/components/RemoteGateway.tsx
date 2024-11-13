@@ -1,8 +1,10 @@
 ﻿import { useState, useRef, useEffect, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import Guacamole from 'guacamole-common-js';
+import { Mimetype } from 'guacamole-common-js/lib/GuacCommon';
 import styled from '@mui/material/styles/styled';
 import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
 import Popper from '@mui/material/Popper';
 import PopupState, { bindPopper, bindHover } from 'material-ui-popup-state';
 import Slide from '@mui/material/Slide';
@@ -17,14 +19,14 @@ import FileCopyIcon from '@mui/icons-material/FileCopy';
 
 import { FullScreen, useFullScreenHandle } from "react-full-screen";
 import CustomizedDialog, { CustomizedDialogHandler } from '@components/CustomizedDialog';
-import { FileExplorer, FileExplorerRef } from '@components/FileExplorer';
+import { FileExplorer, FileExplorerHandler, LocalFsNodeType } from '@components/FileExplorer';
 import { GatewayParametersViewModel } from '@models/GatewayParametersViewModel';
-
-//import { TreeViewBaseItem } from '@mui/x-tree-view/models';
-//import { ExtendedTreeItemProps } from '@components/FileRichSelector';
 
 import axios from 'axios';
 import * as lodash from 'lodash';
+
+import { showDirectoryPicker, FileSystemDirectoryHandle } from 'native-file-system-adapter';
+import { FrontendFileHandleUtil, FileToBlob } from '@utilities/FrontendFileHandleUtility';
 
 const styles = {
     arrow: {
@@ -96,14 +98,18 @@ const base64ToByteCharacters = (base64String: string) => {
     return result;
 }
 
-const base64ToBlob = (base64String: string, mimeType: string) => {
+const base64ToByteNumbers = (base64String: string) => {
     const byteCharacters = base64ToByteCharacters(base64String);
     const byteNumbers = new Uint8Array(byteCharacters.length);
 
     for (let i = 0; i < byteCharacters.length; i++) {
         byteNumbers[i] = byteCharacters.charCodeAt(i);
     }
+    return byteNumbers;
+}
 
+const base64ToBlob = (base64String: string, mimeType: string) => {
+    const byteNumbers = base64ToByteNumbers(base64String);
     return new Blob([byteNumbers], { type: mimeType });
 }
 
@@ -115,12 +121,22 @@ const blobToBase64 = (blob: Blob) => {
     });
 }
 
+type OnBodyArgs = {
+    inStream: Guacamole.InputStream,
+    mimeType: Mimetype,
+    path: string,
+    onDownloadSuccess?: () => void,
+    onDownloadFailed?: (e: unknown) => void,
+    onDownloadFinished?: () => void
+}
+
 const RemoteGateway = () => {
     const occupaciedWidth = 40;
     const occupaciedHeight = 120;
     const containerRef = useRef<Nullable<HTMLDivElement>>(null);
     const [arrowRef, setArrowRef] = useState<Nullable<HTMLSpanElement>>(null);
     const modalRef = useRef<CustomizedDialogHandler>(null);
+    const modalHintRef = useRef<CustomizedDialogHandler>(null);
 
     const fullScreenHandle = useFullScreenHandle();
 
@@ -133,13 +149,15 @@ const RemoteGateway = () => {
         navigate(route, { replace: true });
     }
 
-    const refFileExplorer = useRef<FileExplorerRef>(null);
+    const refFileExplorer = useRef<FileExplorerHandler>(null);
     const refIsConfirmDisconnect = useRef<boolean>(false);
     const refTunnel = useRef<Nullable<Guacamole.Tunnel>>(null);
     const refClient = useRef<Nullable<Guacamole.Client>>(null);
     const refSink = useRef<Nullable<Guacamole.InputSink>>(null);
     const refFileSystem = useRef<Nullable<Guacamole.Object>>(null);
     const [isFullScreen, setIsFullScreen] = useState(false);
+
+    const refLocalFileExpRoot = useRef<Nullable<FileSystemDirectoryHandle>>(null);
 
     const resizeScreen = useCallback(
         lodash.debounce(() => {
@@ -151,6 +169,62 @@ const RemoteGateway = () => {
             trailing: true
         })
     , [isFullScreen]);
+
+    const onBody = async ({ inStream, mimeType, path,
+                            onDownloadSuccess, 
+                            onDownloadFailed,
+                            onDownloadFinished }: OnBodyArgs) => {
+
+        inStream.sendAck("OK", Guacamole.Status.Code.SUCCESS);
+
+        const blobReader = new Guacamole.BlobReader(inStream, mimeType);
+
+        blobReader.onend = () => {
+            const doDownload = async () => {
+                try {
+                    const blob = blobReader.getBlob();
+                    if (mimeType.indexOf('stream-index+json') != -1) {
+                        const strText = await blob.text();
+                        const fileList: { [key: string]: string } = JSON.parse(strText);
+                        refFileExplorer.current?.renewRemoteFsNodes(fileList);
+                    } else {
+                        try {
+                            //Save as a local file
+                            //console.log(`${path}\n`);
+                            //console.log(await blob.text());
+
+                            //Customize an event for onFileDownloaded(fileMap { groupId, filePathes: [] })
+                            const folderNodes = refFileExplorer.current?.getLocalSelectedFolderNodes();
+                            lodash.forEach(folderNodes, async (node) => {
+                                const dirHandle = await FrontendFileHandleUtil.getNestedDirectoryHandle(refLocalFileExpRoot.current!, node.id);
+
+                                const idxOfLastSlash = path.lastIndexOf('/');
+                                const fileName = path.substring(idxOfLastSlash + 1);
+                                const fileHandle = await dirHandle.getFileHandle(fileName, { create: true });
+
+                                const writer = await fileHandle.createWritable();
+                                await writer.write(blob);
+                                await writer.close();
+
+                                //Call on download success callback (Maybe some promise in it)
+                                onDownloadSuccess && onDownloadSuccess();
+                            });
+                        } catch (e) {
+                            //Call on download failed callback (Maybe some promise in it)
+                            onDownloadFailed && onDownloadFailed(e);
+                            console.log(e);
+                        } finally {
+                            //No matter download success or failed call the finished callback
+                            onDownloadFinished && onDownloadFinished();
+                        }
+                    }
+                } catch (e) {
+                    console.log(e);
+                }
+            }
+            doDownload();
+        }
+    }
 
     useEffect(() => {
         window.addEventListener('resize', resizeScreen);
@@ -211,21 +285,9 @@ const RemoteGateway = () => {
         client.onfilesystem = async (object, _name) => {
             refFileSystem.current = object;
 
-            object.onbody = (inStream, _mimeType) => {
-                inStream.sendAck("OK", Guacamole.Status.Code.SUCCESS);
-
-                inStream.onblob = (data) => {
-                    const fileList: { [key: string]: string } = JSON.parse(base64ToByteCharacters(data));
-                    refFileExplorer.current?.renewRemoteFsNodes(fileList);
-
-                    //Notify GUAC the blob is received successfully
-                    inStream.sendAck("OK", Guacamole.Status.Code.SUCCESS);
-                }
-
-                inStream.onend = () => {
-                    //console.log("The stream is closed");
-                }
-            }
+            //object.onundefine = () => {
+            //    console.log("Guacamole file system undefined");
+            //}
         }
 
         // When tunnel close, go back to the host list
@@ -333,6 +395,9 @@ const RemoteGateway = () => {
                 //File transfer
                 argumentsPart["enable-sftp"] = "true";
                 argumentsPart["sftp-password"] = params.Password;
+                argumentsPart["sftp-server-alive-interval"] = "2";
+                argumentsPart["api-session-timeout"] = "60";
+                argumentsPart["api-max-request-size"] = "0";
             }
 
             const tokenURL = `${params.GuacamoleSharpTokenURL}/${params.GuacamoleSharpTokenPhrase}`;
@@ -399,16 +464,182 @@ const RemoteGateway = () => {
                             <FileExplorer
                                 localFsRootName="/"
                                 remoteFsRootName="/"
-                                onLocalItemToggled={(_itemInfo) => {
-                                    //console.log(itemInfo);
-                                }}
-                                onRemoteItemToggled={(itemInfo) => {
-                                    //console.log(itemInfo);
+                                onLocalItemToggled={(itemInfo) => {
                                     if (itemInfo.fileType == "storage" || itemInfo.fileType == "folder") {
-                                        refFileSystem.current?.requestInputStream(itemInfo.path);
+                                        (async () => {
+                                            const parentNode = itemInfo.path;
+                                            const dirHandle = await FrontendFileHandleUtil.getNestedDirectoryHandle(refLocalFileExpRoot.current!, parentNode);
+
+                                            const nestedNodes: Record<string, LocalFsNodeType> = {};
+                                            for await (const entry of dirHandle.values()) {
+                                                nestedNodes[`${lodash.trimEnd(parentNode, "/")}/${entry.name}`] =
+                                                {
+                                                    isFolder: (entry.kind == 'directory')
+                                                };
+                                            }
+
+                                            refFileExplorer.current?.renewLocalFsNodes(nestedNodes);
+                                        })();
                                     }
                                 }}
+                                onLocalRefresh={() => {
+                                    const pickClientDir = async () => {
+                                        try {
+                                            //Clear the previous cached handles
+                                            FrontendFileHandleUtil.reset();
+
+                                            //Choose the client visible directory
+                                            const dirHandle = await showDirectoryPicker();
+                                            if (dirHandle) {
+                                                refLocalFileExpRoot.current = dirHandle;
+                                                refFileExplorer.current?.renewLocalFsNodes({
+                                                    ['/' + lodash.trimStart(dirHandle.name, '\\')]: {
+                                                        isFolder: true
+                                                    }
+                                                });
+                                            }
+                                        } catch (e) {
+                                            console.log(e);
+                                        }
+                                    }
+                                    pickClientDir();
+                                }}
+                                onRemoteItemToggled={(itemInfo) => {
+                                    if (itemInfo.fileType == "storage" || itemInfo.fileType == "folder") {
+                                        refFileSystem.current?.requestInputStream(itemInfo.path, (inStream, mimeType) => {
+                                            onBody({
+                                                inStream: inStream,
+                                                mimeType: mimeType,
+                                                path: itemInfo.path
+                                            });
+                                        });
+                                    }
+                                }}
+                                onRemoteRefresh={() => {
+                                    //從根目錄 / 開始向Guacamole詢問路徑是否為檔案或目錄
+                                    refFileSystem.current?.requestInputStream('/', (inStream, mimeType) => {
+                                        onBody({
+                                            inStream: inStream,
+                                            mimeType: mimeType,
+                                            path: '/'
+                                        });
+                                    });
+                                }}
+                                onDownload={(filePathes) => {
+                                    if (filePathes.length == 0) {
+                                        modalHintRef.current?.setContentPanel(
+                                            <Typography variant="h6" gutterBottom>
+                                                Please choose file(s) want to be downloaded from remote host
+                                            </Typography>
+                                        )
+                                        modalHintRef.current?.setOpen(true);
+                                        return;
+                                    }
+
+                                    if (!refLocalFileExpRoot.current) {
+                                        modalHintRef.current?.setContentPanel(
+                                            <Typography variant="h6" gutterBottom>
+                                                Please choose the local host folder first
+                                            </Typography>
+                                        )
+                                        modalHintRef.current?.setOpen(true);
+                                        return;
+                                    }
+
+                                    const folderNodes = refFileExplorer.current?.getLocalSelectedFolderNodes();
+                                    if (folderNodes?.length == 0) {
+                                        modalHintRef.current?.setContentPanel(
+                                            <Typography variant="h6" gutterBottom>
+                                                Please select at least one folder to save downloaded files at local host
+                                            </Typography>
+                                        )
+                                        modalHintRef.current?.setOpen(true);
+                                        return;
+                                    }
+
+                                    //Request to download files from the remote host
+                                    lodash.forEach(filePathes, path => {
+                                        refFileSystem.current?.requestInputStream(path, (inStream, mimeType) => {
+                                            onBody({
+                                                inStream: inStream,
+                                                mimeType: mimeType,
+                                                path: path
+                                            });
+                                        });
+                                    });                                    
+                                }}
+                                onUpload={(filePathes) => {
+                                    if (!refLocalFileExpRoot.current) {
+                                        modalHintRef.current?.setContentPanel(
+                                            <Typography variant="h6" gutterBottom>
+                                                Please choose the local host folder first
+                                            </Typography>
+                                        )
+                                        modalHintRef.current?.setOpen(true);
+                                        return;
+                                    }
+
+                                    if (filePathes.length == 0) {
+                                        modalHintRef.current?.setContentPanel(
+                                            <Typography variant="h6" gutterBottom>
+                                                Please choose file(s) want to be uploaded from local host
+                                            </Typography>
+                                        )
+                                        modalHintRef.current?.setOpen(true);
+                                        return;
+                                    }
+
+                                    const remoteDirNodes = refFileExplorer.current?.getRemoteSelectedFolderNodes();
+                                    if (remoteDirNodes?.length == 0) {
+                                        modalHintRef.current?.setContentPanel(
+                                            <Typography variant="h6" gutterBottom>
+                                                Please select at least one folder to save uploaded files at remote host
+                                            </Typography>
+                                        )
+                                        modalHintRef.current?.setOpen(true);
+                                        return;
+                                    }
+
+                                    //Request to uploaded files to the remote host
+                                    lodash.forEach(remoteDirNodes!, (node) => {
+                                        const destDirPath = node.id;
+
+                                        lodash.forEach(filePathes, async (path) => {
+                                            const fileHandle = await FrontendFileHandleUtil.getNestedFileHandle(refLocalFileExpRoot.current!, path);
+                                            const file = await fileHandle.getFile();
+
+
+                                            const destFilePath = `${destDirPath}/${file.name}`;
+
+                                            const outStream = refFileSystem.current?.createOutputStream(file.type, destFilePath);
+                                            if (outStream) {
+                                                const blob = await FileToBlob(file);
+                                                const blobWriter = new Guacamole.BlobWriter(outStream);
+                                                blobWriter.sendBlob(blob);
+
+                                                blobWriter.onerror = (_blob, _offset, error) => {
+                                                    modalHintRef.current?.setContentPanel(
+                                                        <Typography variant="h6" gutterBottom>
+                                                            { `${file.name} uploaded failed! message: ${error.message}` }
+                                                        </Typography>
+                                                    )
+                                                    modalHintRef.current?.setOpen(true);
+                                                }
+
+                                                blobWriter.oncomplete = (_blob) => {
+                                                    blobWriter.sendEnd();
+                                                }
+                                            }
+                                        });
+                                    });
+                                }}
                                 ref={refFileExplorer} />
+                        </CustomizedDialog>
+                        <CustomizedDialog
+                            title="Warning"
+                            autoClose={1000}
+                            open={false}
+                            ref={modalHintRef} >
                         </CustomizedDialog>
                     </FullScreen>                    
                     <StyledPopper
@@ -488,7 +719,13 @@ const RemoteGateway = () => {
                                         }
                                         <Tooltip arrow title="File transfer" onClick={() => {
                                             //從根目錄 / 開始向Guacamole詢問路徑是否為檔案或目錄
-                                            refFileSystem.current?.requestInputStream('/');
+                                            refFileSystem.current?.requestInputStream('/', (inStream, mimeType) => {
+                                                onBody({
+                                                    inStream: inStream,
+                                                    mimeType: mimeType,
+                                                    path: '/'
+                                                });
+                                            });
                                             modalRef.current?.setOpen(true);
                                         }} >
                                             <IconButton>

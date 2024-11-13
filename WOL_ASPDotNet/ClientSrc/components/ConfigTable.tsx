@@ -169,6 +169,7 @@ export const ConfigTable = () => {
                                         }
                                         variant="standard"
                                         {...register("CacheExpirationTimespan", { /*setValueAs: defaultNull*/ })}
+                                        placeholder="60"
                                     />
                                 </TableCell>
                             </TableRow>
@@ -184,6 +185,7 @@ export const ConfigTable = () => {
                                         }
                                         variant="standard"
                                         {...register("CacheDumpTimespan", { /*setValueAs: defaultNull*/ })}
+                                        placeholder="1"
                                     />
                                 </TableCell>
                             </TableRow>
@@ -195,6 +197,7 @@ export const ConfigTable = () => {
                                     <TextField
                                         variant="standard"
                                         {...register("GuacamoleSharpWebSocket", { /*setValueAs: defaultNull*/ })}
+                                        placeholder="ws://localhost:8088/connect"
                                     />
                                 </TableCell>
                             </TableRow>
@@ -206,6 +209,7 @@ export const ConfigTable = () => {
                                     <TextField
                                         variant="standard"
                                         {...register("GuacamoleSharpTokenURL", { /*setValueAs: defaultNull*/ })}
+                                        placeholder="http://localhost:8088/token"
                                     />
                                 </TableCell>
                             </TableRow>
@@ -217,6 +221,7 @@ export const ConfigTable = () => {
                                     <TextField
                                         variant="standard"
                                         {...register("GuacamoleSharpTokenPhrase", { /*setValueAs: defaultNull*/ })}
+                                        placeholder="aA1234567"
                                     />
                                 </TableCell>
                             </TableRow>

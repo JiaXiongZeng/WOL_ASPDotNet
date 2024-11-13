@@ -281,15 +281,19 @@ export interface FileRichSelectorProps
     onItemToggled?: (itemInfo: ItemInfo) => void
 }
 
-export type FileRichSelectorRef =
+export type FileRichSelectorHandler =
 {
+    resetAll: () => void,
     setFileSystemNodes: (nodes: TreeViewBaseItem<ExtendedTreeItemProps>[]) => void,
     getSelectedPathes: () => string[],
+    getSelectedFilePathes: () => string[],
+    getSelectedNodes: () => TreeViewBaseItem<ExtendedTreeItemProps>[],
+    getSelectedFolderNodes: () => TreeViewBaseItem<ExtendedTreeItemProps>[],
     setItemFocused: (e: React.SyntheticEvent,  itemId: string) => void,
     getFocusedItemDOM: (itemId: string) => Nullable<HTMLElement> | undefined
 } 
 
-export const FileRichSelector = forwardRef<FileRichSelectorRef, FileRichSelectorProps>((props, ref) => {
+export const FileRichSelector = forwardRef<FileRichSelectorHandler, FileRichSelectorProps>((props, ref) => {
     const { nodes, sx, onItemToggled } = props;
     const [fileSystemTree, setFileSystemTree] = useState<TreeViewBaseItem<ExtendedTreeItemProps>[]>([]);
     const [selectedItems, setSelectedItems] = useState<string[]>([]);
@@ -302,11 +306,31 @@ export const FileRichSelector = forwardRef<FileRichSelectorRef, FileRichSelector
     }, [nodes]);
 
     useImperativeHandle(ref, () => ({
+        resetAll: () => {
+            setFileSystemTree([]);
+            setSelectedItems([]);
+            setExpandedItems([]);
+        },
         setFileSystemNodes: (nodes) => {
             setFileSystemTree(nodes);
         },
         getSelectedPathes: () => {
             return selectedItems;
+        },
+        getSelectedFilePathes: () => {
+            const items = fileSystemTree.findItemsByIds(selectedItems);
+            const fileItems = lodash.filter(items, x => !(x.fileType == 'folder' || x.fileType == 'storage'));
+            const filePathes = fileItems.map(x => x.id);
+            return filePathes;
+        },
+        getSelectedNodes: () => {
+            const items = fileSystemTree.findItemsByIds(selectedItems);
+            return items;
+        },
+        getSelectedFolderNodes: () => {
+            const items = fileSystemTree.findItemsByIds(selectedItems);
+            const folderItems = lodash.filter(items, x => (x.fileType == 'folder' || x.fileType == 'storage'));
+            return folderItems;
         },
         setItemFocused: (e, itemId) => {
             refTreeAPI.current?.focusItem(e, itemId);
