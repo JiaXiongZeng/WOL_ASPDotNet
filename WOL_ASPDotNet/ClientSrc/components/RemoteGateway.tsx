@@ -92,34 +92,34 @@ const StyledPopper = styled(Popper)(({ theme }) => ({ // You can replace with `P
     },
 }));
 
-const base64ToByteCharacters = (base64String: string) => {
-    const base64WithoutPrefix = base64String.split(',')[1] || base64String;
-    const result = atob(base64WithoutPrefix);
-    return result;
-}
+//const base64ToByteCharacters = (base64String: string) => {
+//    const base64WithoutPrefix = base64String.split(',')[1] || base64String;
+//    const result = atob(base64WithoutPrefix);
+//    return result;
+//}
 
-const base64ToByteNumbers = (base64String: string) => {
-    const byteCharacters = base64ToByteCharacters(base64String);
-    const byteNumbers = new Uint8Array(byteCharacters.length);
+//const base64ToByteNumbers = (base64String: string) => {
+//    const byteCharacters = base64ToByteCharacters(base64String);
+//    const byteNumbers = new Uint8Array(byteCharacters.length);
 
-    for (let i = 0; i < byteCharacters.length; i++) {
-        byteNumbers[i] = byteCharacters.charCodeAt(i);
-    }
-    return byteNumbers;
-}
+//    for (let i = 0; i < byteCharacters.length; i++) {
+//        byteNumbers[i] = byteCharacters.charCodeAt(i);
+//    }
+//    return byteNumbers;
+//}
 
-const base64ToBlob = (base64String: string, mimeType: string) => {
-    const byteNumbers = base64ToByteNumbers(base64String);
-    return new Blob([byteNumbers], { type: mimeType });
-}
+//const base64ToBlob = (base64String: string, mimeType: string) => {
+//    const byteNumbers = base64ToByteNumbers(base64String);
+//    return new Blob([byteNumbers], { type: mimeType });
+//}
 
-const blobToBase64 = (blob: Blob) => {
-    return new Promise<string>((res, _) => {
-        const reader = new FileReader();
-        reader.onloadend = () => res(reader.result as string);
-        reader.readAsDataURL(blob);
-    });
-}
+//const blobToBase64 = (blob: Blob) => {
+//    return new Promise<string>((res, _) => {
+//        const reader = new FileReader();
+//        reader.onloadend = () => res(reader.result as string);
+//        reader.readAsDataURL(blob);
+//    });
+//}
 
 type OnBodyArgs = {
     inStream: Guacamole.InputStream,
@@ -251,35 +251,53 @@ const RemoteGateway = () => {
 
         // Copy from remote host
         client.onclipboard = async (inStream, mimeType) => {
-            inStream.onblob = async (data64) => {
-                const blob = base64ToBlob(data64, mimeType);
+            const blobReader = new Guacamole.BlobReader(inStream, mimeType);
 
-                const clipboardItem = new ClipboardItem({
-                    [mimeType]: blob
-                });
+            blobReader.onend = () => {
+                const copyFromRemote = async () => {
+                    try {
+                        const blob = blobReader.getBlob();
+                        const clipboardItem = new ClipboardItem({
+                            [mimeType]: blob
+                        });
 
-                await navigator.clipboard.write([clipboardItem]).catch(error => {
-                    console.log(error);
-                });
-
-                inStream.sendAck("OK", Guacamole.Status.Code.SUCCESS);
-            };
+                        await navigator.clipboard.write([clipboardItem]).catch(error => {
+                            console.log(error);
+                        });
+                    } catch (e) {
+                        console.log(e);
+                    }
+                }
+                copyFromRemote();
+            }
         }
 
         // Copy to remote host
-        window.onfocus = async () => {
-            const clipboardItems = await navigator.clipboard.read();
-            for (const clipboardItem of clipboardItems) {
-                for (const type of clipboardItem.types) {
-                    const blob = await clipboardItem.getType(type);                    
-                    const blobAsDataUrl = await blobToBase64(blob);
-                    const blobAsB64 = blobAsDataUrl.split(",")[1];
+        window.onfocus = () => {
+            const copyToRemote = async () => {
+                try {
+                    const clipboardItems = await navigator.clipboard.read();
+                    for (const clipboardItem of clipboardItems) {
+                        for (const type of clipboardItem.types) {
+                            const blob = await clipboardItem.getType(type);
+                            const outStream = client.createClipboardStream(type);
+                            const writer = new Guacamole.StringWriter(outStream);
+                            const text = await blob.text();
 
-                    const outStream = client.createClipboardStream(type);
-                    outStream.sendBlob(blobAsB64);
-                    outStream.sendEnd();
+                            const CHUNK_SIZE = 4096;
+                            for (let i = 0; i < text.length; i += CHUNK_SIZE) {
+                                writer.sendText(text.substring(i, i + CHUNK_SIZE));
+                            }
+
+                            //Close stream
+                            writer.sendEnd();
+                        }
+                    }
+                } catch (e) {
+                    console.log(e);
                 }
             }
+            copyToRemote();
         }
 
         client.onfilesystem = async (object, _name) => {
@@ -615,9 +633,10 @@ const RemoteGateway = () => {
                                             if (outStream) {
                                                 const blob = await FileToBlob(file);
                                                 const blobWriter = new Guacamole.BlobWriter(outStream);
-                                                blobWriter.sendBlob(blob);
 
                                                 blobWriter.onerror = (_blob, _offset, error) => {
+                                                    //Close stream
+                                                    blobWriter.sendEnd();
                                                     modalHintRef.current?.setContentPanel(
                                                         <Typography variant="h6" gutterBottom>
                                                             { `${file.name} uploaded failed! message: ${error.message}` }
@@ -627,8 +646,11 @@ const RemoteGateway = () => {
                                                 }
 
                                                 blobWriter.oncomplete = (_blob) => {
+                                                    //Close stream
                                                     blobWriter.sendEnd();
                                                 }
+
+                                                blobWriter.sendBlob(blob);
                                             }
                                         });
                                     });

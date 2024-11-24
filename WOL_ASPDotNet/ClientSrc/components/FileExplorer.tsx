@@ -295,17 +295,19 @@ export const FileExplorer = forwardRef<FileExplorerHandler, FileExplorerProps>((
                         }}>
                             <Typography variant="h6">Local Host</Typography>
                             <Box>
-                                <IconButton onClick={async () => {
-                                    //Initialize the local file system nodes
-                                    refLocalFileExplorer.current?.resetAll();
-                                    setLocalFsNodes([]);
-                                    setLocalPath('/');
+                                <Tooltip arrow placement="top-start" title="Mount local visible folder">
+                                    <IconButton onClick={async () => {
+                                        //Initialize the local file system nodes
+                                        refLocalFileExplorer.current?.resetAll();
+                                        setLocalFsNodes([]);
+                                        setLocalPath('/');
 
-                                    //Refresh new pathes
-                                    onLocalRefresh && onLocalRefresh();
-                                }}>
-                                    <FolderOpenIcon />
-                                </IconButton>
+                                        //Refresh new pathes
+                                        onLocalRefresh && onLocalRefresh();
+                                    }}>
+                                        <FolderOpenIcon />
+                                    </IconButton>
+                                </Tooltip>
                             </Box>
                         </Box>
                         <FileBreadcrumbs path={localPath} handlePathChange={(e, newPath) => {
@@ -357,17 +359,19 @@ export const FileExplorer = forwardRef<FileExplorerHandler, FileExplorerProps>((
                         }}>
                             <Typography variant="h6">Remote Host</Typography>
                             <Box>
-                                <IconButton onClick={() => {
-                                    //Initialize the remote file system nodes
-                                    refRemoteFileExplorer.current?.resetAll();
-                                    setRemoteFsNodes([]);
-                                    setRemotePath('/');
+                                <Tooltip arrow placement="top-start" title="Reload remote file system">
+                                    <IconButton onClick={() => {
+                                        //Initialize the remote file system nodes
+                                        refRemoteFileExplorer.current?.resetAll();
+                                        setRemoteFsNodes([]);
+                                        setRemotePath('/');
 
-                                    //Refresh new pathes
-                                    onRemoteRefresh && onRemoteRefresh();
-                                }}>
-                                    <RefreshIcon />
-                                </IconButton>
+                                        //Refresh new pathes
+                                        onRemoteRefresh && onRemoteRefresh();
+                                    }}>
+                                        <RefreshIcon />
+                                    </IconButton>
+                                </Tooltip>
                             </Box>
                         </Box>                        
                         <FileBreadcrumbs path={remotePath} handlePathChange={(e, newPath) => {
