@@ -177,7 +177,7 @@ const HostList = forwardRef<HostListHandler, HostListProp>((props, ref) => {
         });
     };
 
-    useEffect(() => {        
+    useEffect(() => {
         getHostList();
     }, []);
 
@@ -211,7 +211,7 @@ const HostList = forwardRef<HostListHandler, HostListProp>((props, ref) => {
                             }
                         }
                     });
-                }, Math.floor(lodash.random(1, hostList?.length!, true)) * 50, [host]);                                      
+                }, Math.floor(lodash.random(1, hostList?.length!, true)) * 50, [host]);
             });
         }
     }, [tryToPing]);
@@ -316,7 +316,7 @@ const HostList = forwardRef<HostListHandler, HostListProp>((props, ref) => {
                                         }}
                                     />
                                 </TableCell>
-                            }                            
+                            }
                             <TableCell align="center">HostName</TableCell>
                             <TableCell align="center" sx={{ minWidth: "210px" }} >Domain</TableCell>
                             <TableCell align="center" sx={{ minWidth: "110px" }} >IPv4</TableCell>
@@ -326,7 +326,7 @@ const HostList = forwardRef<HostListHandler, HostListProp>((props, ref) => {
                             {
                                 showAction &&
                                 <TableCell align="center">Action</TableCell>
-                            }                            
+                            }
                         </MuiTableRow>
                     </TableHead>
                     <TableBody>
@@ -357,7 +357,7 @@ const HostList = forwardRef<HostListHandler, HostListProp>((props, ref) => {
                                                 }}
                                             />
                                         </TableCell>
-                                    }                                    
+                                    }
                                     <TableCell align="center" component="th" scope="row">
                                         {row.HostName}
                                     </TableCell>
@@ -397,7 +397,9 @@ const HostList = forwardRef<HostListHandler, HostListProp>((props, ref) => {
                                                                             height: "unset",
                                                                             padding: "8px",
                                                                             backgroundColor: 'transparent'
-                                                                        }
+                                                                        },
+                                                                        //avoid aria-hidden=true focus block error
+                                                                        tabIndex: -1
                                                                     }}>
                                                                     {
                                                                         ConnActions.map((action) =>
@@ -424,11 +426,11 @@ const HostList = forwardRef<HostListHandler, HostListProp>((props, ref) => {
                                                                                                 ...respData.Attachment
                                                                                             });
                                                                                         }
-                                                                                    });                                                                       
+                                                                                    });
                                                                                 }} />
                                                                         )
                                                                     }
-                                                            </SpeedDial>                                                           
+                                                            </SpeedDial>
                                                             :
                                                             <Tooltip arrow title="Turn on PC" onClick={async() => {
                                                                     const data = {
@@ -452,13 +454,13 @@ const HostList = forwardRef<HostListHandler, HostListProp>((props, ref) => {
                                                                     <IconButton>
                                                                         <PowerOff />
                                                                     </IconButton>
-                                                            </Tooltip>                                                        
+                                                            </Tooltip>
                                                     )
                                                 }
                                             
                                                 <Tooltip arrow title="Config the RDP settings">
                                                         <IconButton onClick={async () => {
-                                                            await loadConnSettings(row.MacAddress);                                                      
+                                                            await loadConnSettings(row.MacAddress);
                                                         }}>
                                                             <Settings />
                                                         </IconButton>
@@ -478,7 +480,7 @@ const HostList = forwardRef<HostListHandler, HostListProp>((props, ref) => {
                                                 </Tooltip>
                                             </Box>
                                         </TableCell>
-                                    }                                    
+                                    }
                                 </TableRow>
                             );
                         })}
@@ -549,7 +551,7 @@ const HostList = forwardRef<HostListHandler, HostListProp>((props, ref) => {
                         </Button>
                     </>
                 }
-                ref={modalConnSettingsRef}  >                
+                ref={modalConnSettingsRef}  >
             </CustomizedDialog>
             <CustomizedDialog
                 title="Infomation"

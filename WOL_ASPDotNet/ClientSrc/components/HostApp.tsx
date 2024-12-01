@@ -12,6 +12,9 @@ import AuthenticationRequired from '@components/AuthenticationRequired';
 import HomePage from '@components/HomePage';
 import LoginScreenLocal from '@components/LoginScreenLocal';
 
+import { DndProvider } from 'react-dnd';
+import { HTML5Backend } from 'react-dnd-html5-backend';
+
 export const HostApp = () => {
     const [configCtx, configDispatch] = useReducer(ConfigReducer, null);
     const [authCtx, authDispatch] = useReducer(AuthReducer, null);
@@ -22,19 +25,21 @@ export const HostApp = () => {
                 <AuthContext.Provider value={authCtx}>
                     <AuthDispatchContext.Provider value={authDispatch}>
                         <ThemeProvider theme={theme}>
-                            <BrowserRouter>
-                                <CssBaseline />
-                                <Routes>
-                                    <Route path="/Login" element={<LoginScreenLocal />} />
-                                    <Route element={<AuthenticationRequired />}>
-                                        <Route path="*" element={<HomePage />} />
-                                    </Route>
-                                </Routes>
-                            </BrowserRouter>
+                            <DndProvider backend={HTML5Backend}>
+                                <BrowserRouter>
+                                    <CssBaseline />
+                                    <Routes>
+                                        <Route path="/Login" element={<LoginScreenLocal />} />
+                                        <Route element={<AuthenticationRequired />}>
+                                            <Route path="*" element={<HomePage />} />
+                                        </Route>
+                                    </Routes>
+                                </BrowserRouter>
+                            </DndProvider>
                         </ThemeProvider>
                     </AuthDispatchContext.Provider>
                 </AuthContext.Provider>
-            </ConfigDispatchContext.Provider>        
+            </ConfigDispatchContext.Provider>
         </ConfigContext.Provider>
     );
 }

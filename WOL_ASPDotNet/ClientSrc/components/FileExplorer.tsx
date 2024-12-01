@@ -1,30 +1,38 @@
-﻿import { useState, useEffect } from 'react';
+﻿import {
+    useState, useRef,
+    forwardRef, useImperativeHandle
+} from 'react';
 
+import { useImmer } from 'use-immer';
 
 import { styled } from '@mui/material/styles';
 import Grid from '@mui/material/Grid';
 import Paper from '@mui/material/Paper';
 import Box from '@mui/material/Box';
 import Stack from '@mui/material/Stack';
-import Link from '@mui/material/Link';
 import Typography from '@mui/material/Typography';
-import Breadcrumbs from '@mui/material/Breadcrumbs';
+
 import IconButton from '@mui/material/IconButton';
 import Tooltip from '@mui/material/Tooltip';
 import LinearProgress, { LinearProgressProps } from '@mui/material/LinearProgress';
 import Badge from '@mui/material/Badge';
 
-import { SimpleTreeView } from '@mui/x-tree-view/SimpleTreeView';
-import { TreeItem } from '@mui/x-tree-view/TreeItem';
+import FolderOpenIcon from '@mui/icons-material/FolderOpen';
+import RefreshIcon from '@mui/icons-material/Refresh';
 
-
-import CreateNewFolderIcon from '@mui/icons-material/CreateNewFolder';
-import DriveFileMoveIcon from '@mui/icons-material/DriveFileMove';
-import DeleteForeverIcon from '@mui/icons-material/DeleteForever';
 import KeyboardDoubleArrowLeftIcon from '@mui/icons-material/KeyboardDoubleArrowLeft';
 import KeyboardDoubleArrowRightIcon from '@mui/icons-material/KeyboardDoubleArrowRight';
 import FileUploadIcon from '@mui/icons-material/FileUpload';
 import FileDownloadIcon from '@mui/icons-material/FileDownload';
+
+import { TreeViewBaseItem } from '@mui/x-tree-view/models';
+
+import { FileRichSelector, ExtendedTreeItemProps, FileRichSelectorHandler, FileType, ItemInfo } from '@components/FileRichSelector';
+import { FileBreadcrumbs } from '@components/FileBreadcumbs';
+
+import * as lodash from 'lodash';
+import '@extensions/ExtTreeViewBaseItem.d';
+import { SwitchCase, conditionObj } from '@utilities/SwitchCaseUtility';
 
 
 const RectIconButton = styled(IconButton)(() => ({
@@ -49,76 +57,250 @@ const LinearProgressWithLabel = (props: LinearProgressProps & { value: number })
     );
 }
 
-const renderBreadcrumbs = (path: string[], handlePathChange: (f: string) => void) => {
-    const breadcrumbLinks = path.map((folder, index) => {
-        const isLast = index === path.length - 1;
-        const link = isLast ? (
-            <Typography key={index} color="text.primary">{folder}</Typography>
-        ) : (
-            <Link
-                key={index}
-                color="inherit"
-                onClick={() => handlePathChange(folder)}
-                style={{ cursor: 'pointer' }}
-            >
-                {folder}
-            </Link>
-        );
-        return link;
-    });
+export const getFileExt = (fileName: string) => {
+    const lastIdxOfDot = fileName.lastIndexOf('.');
+    let ext = "";
+    if (lastIdxOfDot != -1) {
+        ext = fileName.substring(lastIdxOfDot + 1);
+    } else {
+        if (fileName.includes(':') || fileName == '/') {
+            ext = fileName;
+        }
+    }
+    return ext;
+}
 
-    return (
-        <Breadcrumbs maxItems={4} itemsBeforeCollapse={0} itemsAfterCollapse={4}
-            sx={{
-                '& .MuiBreadcrumbs-separator': {
-                    marginLeft: '2px',
-                    marginRight: '2px'
-                },
-                paddingLeft: '8px',
-                paddingRight: '8px'
-            }} >
-            {breadcrumbLinks}
-        </Breadcrumbs>
-    );
+export const judgeFileType = (ext: string, isFolder: boolean): FileType => {
+    let result: FileType  = 'others';
+
+    if (ext.includes(':') || ext == '/') {
+        result = 'storage';
+        return result;
+    }
+
+    if (isFolder) {
+        result = 'folder';
+        return result;
+    }
+
+    result = SwitchCase(() => {
+        const imagePredicate = (): FileType => 'image';
+        const result: conditionObj<string, FileType> = {
+            cases: {
+                'pdf': () => 'pdf',
+                'doc': () => 'doc',
+                'folder': () => 'folder',
+                'jpg': imagePredicate,
+                'jpeg': imagePredicate,
+                'gif': imagePredicate,
+                'png': imagePredicate,
+                'bmp': imagePredicate,
+                'svg': imagePredicate
+            },
+            defaultCase: () => 'others'
+        }
+        return result;
+    })(ext);
+
+    return result;
+}
+
+export type LocalFsNodeType = {
+    isFolder: boolean
 };
 
-export const FileExplorer = () => {
+export interface FileExplorerProps {
+    localFsRootName: string,
+    remoteFsRootName: string,
+    onRemoteItemToggled?: (itemInfo: ItemInfo) => void,
+    onRemoteRefresh?: () => void,
+    onLocalItemToggled?: (itemInfo: ItemInfo) => void,
+    onLocalRefresh?: () => void,
+    onDownload?: (filePathes: string[]) => void,
+    onUpload?: (filePathes: string[]) => void,
+    isDownloadEnabled: boolean,
+    isUploadEnabled: boolean
+}
+
+export type FileExplorerHandler = {
+    renewLocalFsNodes: (rowFilePathes: Record<string, LocalFsNodeType>) => void,
+    renewRemoteFsNodes: (rowFilePathes: Record<string, string>) => void,
+    getLocalFsNodes: () => TreeViewBaseItem<ExtendedTreeItemProps>[],
+    getRemoteFsNodes: () => TreeViewBaseItem<ExtendedTreeItemProps>[],
+    getLocalSelectedNodes: () => TreeViewBaseItem<ExtendedTreeItemProps>[],
+    getLocalSelectedFolderNodes: () => TreeViewBaseItem<ExtendedTreeItemProps>[],
+    getRemoteSelectedNodes: () => TreeViewBaseItem<ExtendedTreeItemProps>[],
+    getRemoteSelectedFolderNodes: () => TreeViewBaseItem<ExtendedTreeItemProps>[],
+    setDownloadEnabled: (isEnable: boolean) => void,
+    setUploadEnabled: (isEnable: boolean) => void,
+    setDownloadProgress: (percentage: number) => void,
+    setUploadProgress: (percentage: number) => void,
+    setDownloadBadgeCount: (count: number) => void,
+    setUploadBadgeCount: (count: number) => void
+}
+
+export const FileExplorer = forwardRef<FileExplorerHandler, FileExplorerProps>((props, ref) => {
     const transferPanelHeight = 30;
-    const [localPath, setLocalPath] = useState(['Local']);
-    const [remotePath, setRemotePath] = useState(['Remote']);
+    const {
+        localFsRootName, remoteFsRootName,
+        onLocalItemToggled, onLocalRefresh,
+        onRemoteItemToggled, onRemoteRefresh,
+        onDownload, onUpload,
+        isDownloadEnabled, isUploadEnabled
+    } = props;
+    
+    const refLocalFileExplorer = useRef<FileRichSelectorHandler>(null);
+    const refRemoteFileExplorer = useRef<FileRichSelectorHandler>(null);
 
-    const [upProgress, setUpProgress] = useState(10);
 
+    //Root Pathes
+    const [localPath, setLocalPath] = useState(localFsRootName);
+    const [remotePath, setRemotePath] = useState(remoteFsRootName);
 
+    //Data Transfer Badge
+    const [uploadBadgeCount, setUploadBadgeCount] = useState(0);
+    const [downloadBadgeCount, setDownloadBadgeCount] = useState(0);
 
+    //Data Transfer Progress
+    const [uploadProgress, setUploadProgress] = useState(0);
+    const [downloadProgress, setDownloadProgress] = useState(0);
 
-    const handleLocalPathChange = (newPath: string) => {
-        setLocalPath([...localPath, newPath]);
-    };
+    //Availabitity for download / upload buttons
+    const [isUploadDisabled, setIsUploadDisabled] = useState(!isUploadEnabled);
+    const [isDownloadDisabled, setIsDownloadDisabled] = useState(!isDownloadEnabled);
 
-    const handleRemotePathChange = (newPath: string) => {
-        setRemotePath([...remotePath, newPath]);
-    };
+    //Nodes for download / upload treeviews
+    const [localFsNodes, setLocalFsNodes] = useImmer<TreeViewBaseItem<ExtendedTreeItemProps>[]>([]);
+    const [remoteFsNodes, setRemoteFsNodes] = useImmer<TreeViewBaseItem<ExtendedTreeItemProps>[]>([]);
 
+    //Event handle for upload
     const handleUpload = () => {
-        console.log("Upload initiated!");
+        const filePathes = refLocalFileExplorer.current?.getSelectedFilePathes();
+        onUpload && onUpload(filePathes || []);
     };
 
+    //Event handle for download
     const handleDownload = () => {
-        console.log("Download initiated!");
+        const filePathes = refRemoteFileExplorer.current?.getSelectedFilePathes();
+        onDownload && onDownload(filePathes || []);
     };
 
+    useImperativeHandle(ref, () => ({
+        renewLocalFsNodes: (rowFilePathes: Record<string, LocalFsNodeType>) => {
+            lodash.forEach(rowFilePathes, (metaType, path) => {
+                const tokens = path.split('/');
+                const fileName = lodash.last(tokens)! || '/';
+                const parentPath = '/' + lodash.trimStart(path.substring(0, path.length - fileName.length - 1), '/');
+                const isFolder = metaType.isFolder;
 
-    useEffect(() => {
-        const timer = setInterval(() => {
-            setUpProgress((prevProgress) => (prevProgress >= 100 ? 10 : prevProgress + 10));
-        }, 800);
-        return () => {
-            clearInterval(timer);
-        };
-    }, []);
+                //Expand the nodes retrived from remote host
+                setLocalFsNodes(draft => {
+                    const findNodes = draft.findItemsByIds([path]);
+                    if (findNodes.length == 0) {
+                        const parentNodes = draft.findItemsByIds([parentPath]);
+                        if (parentNodes.length == 0) {
+                            //Create new node under root node
+                            draft.push({
+                                id: path,
+                                label: fileName,
+                                fileType: judgeFileType(getFileExt(fileName), isFolder)
+                            });
+                        } else {
+                            //Create new node under specific parent node
+                            const theParentNode = parentNodes[0];
+                            if (!theParentNode.children) {
+                                theParentNode.children = [];
+                            }
 
+                            const isExist = lodash.some(theParentNode.children, x => x.id == path);
+                            if (!isExist) {
+                                theParentNode.children.push({
+                                    id: path,
+                                    label: fileName,
+                                    fileType: judgeFileType(getFileExt(fileName), isFolder)
+                                });
+                            }
+                        }
+                    }
+                });
+            });
+        },
+        renewRemoteFsNodes: (rowFilePathes: Record<string, string>) => {
+            lodash.forEach(rowFilePathes, (metaType, path) => {
+                const tokens = path.split('/');
+                const fileName = lodash.last(tokens)!;
+                const parentPath = path.substring(0, path.length - fileName.length - 1);
+                const isFolder = (metaType.indexOf('stream-index+json') != -1);
 
+                //Expand the nodes retrived from remote host
+                setRemoteFsNodes(draft => {
+                    const findNodes = draft.findItemsByIds([path]);
+                    if (findNodes.length == 0) {                        
+                        const parentNodes = draft.findItemsByIds([parentPath]);
+                        if (parentNodes.length == 0) {
+                            //Create new node under root node
+                            draft.push({
+                                id: path,
+                                label: fileName,
+                                fileType: judgeFileType(getFileExt(fileName), isFolder)
+                            });
+                        } else {
+                            //Create new node under specific parent node
+                            const theParentNode = parentNodes[0];
+                            if (!theParentNode.children) {
+                                theParentNode.children = [];
+                            }
+
+                            const isExist = lodash.some(theParentNode.children, x => x.id == path);
+                            if (!isExist) {
+                                theParentNode.children.push({
+                                    id: path,
+                                    label: fileName,
+                                    fileType: judgeFileType(getFileExt(fileName), isFolder)
+                                });
+                            }
+                        }
+                    }
+                });
+            });
+        },
+        getLocalFsNodes: () => {
+            return localFsNodes;
+        },
+        getRemoteFsNodes: () => {
+            return remoteFsNodes;
+        },
+        getLocalSelectedNodes: () => {
+            return refLocalFileExplorer.current?.getSelectedNodes() || [];
+        },
+        getLocalSelectedFolderNodes: () => {
+            return refLocalFileExplorer.current?.getSelectedFolderNodes() || [];
+        },
+        getRemoteSelectedNodes: () => {
+            return refRemoteFileExplorer.current?.getSelectedNodes() || [];
+        },
+        getRemoteSelectedFolderNodes: () => {
+            return refRemoteFileExplorer.current?.getSelectedFolderNodes() || [];
+        },
+        setDownloadEnabled: (isEnabled) => {
+            setIsDownloadDisabled(!isEnabled);
+        },
+        setUploadEnabled: (isEnabled) => {
+            setIsUploadDisabled(!isEnabled);
+        },        
+        setDownloadProgress: (percentage) => {
+            setDownloadProgress(percentage);
+        },
+        setUploadProgress: (percentage) => {
+            setUploadProgress(percentage);
+        },
+        setDownloadBadgeCount: (count) => {
+            setDownloadBadgeCount(count);
+        },
+        setUploadBadgeCount: (count) => {
+            setUploadBadgeCount(count);
+        }
+    }), [ localFsNodes, remoteFsNodes ]);
 
     return (
         <>
@@ -134,36 +316,40 @@ export const FileExplorer = () => {
                         }}>
                             <Typography variant="h6">Local Host</Typography>
                             <Box>
-                                <IconButton>
-                                    <CreateNewFolderIcon />
-                                </IconButton>
-                                <IconButton>
-                                    <DriveFileMoveIcon />
-                                </IconButton>
-                                <IconButton>
-                                    <DeleteForeverIcon />
-                                </IconButton>
+                                <Tooltip arrow placement="top-start" title="Mount local visible folder">
+                                    <IconButton onClick={async () => {
+                                        //Initialize the local file system nodes
+                                        refLocalFileExplorer.current?.resetAll();
+                                        setLocalFsNodes([]);
+                                        setLocalPath('/');
+
+                                        //Refresh new pathes
+                                        onLocalRefresh && onLocalRefresh();
+                                    }}>
+                                        <FolderOpenIcon />
+                                    </IconButton>
+                                </Tooltip>
                             </Box>
                         </Box>
-                        {renderBreadcrumbs(localPath, handleLocalPathChange)}
-                        <SimpleTreeView sx={{ height: `${transferPanelHeight}vh`, maxHeight: `${transferPanelHeight}vh`, overflow: 'auto' }}>
-                            <TreeItem itemId="1" label="Folder A">
-                                <TreeItem itemId="2" label="Subfolder A1" onClick={() => handleLocalPathChange('Subfolder A1')} />
-                                <TreeItem itemId="3" label="Subfolder A2" onClick={() => handleLocalPathChange('Subfolder A2')} />
-                            </TreeItem>
-                            <TreeItem itemId="4" label="Folder B">
-                                <TreeItem itemId="5" label="File B1.txt" />
-                            </TreeItem>
-                            <TreeItem itemId="6" label="Folder C">
-                                <TreeItem itemId="7" label="File C1.txt" />
-                                <TreeItem itemId="6-1" label="Folder C-1">
-                                    <TreeItem itemId="6-1-1" label="File C-1-1.txt" />
-                                </TreeItem>
-                            </TreeItem>
-                            <TreeItem itemId="8" label="Folder D">
-                                <TreeItem itemId="9" label="File D1.txt" />
-                            </TreeItem>
-                        </SimpleTreeView>
+                        <FileBreadcrumbs path={localPath} handlePathChange={(e, newPath) => {
+                            refLocalFileExplorer.current?.setItemFocused(e, newPath);
+
+                            //Scroll to the clicked item
+                            setTimeout(() => {
+                                const currentItemDOM = refLocalFileExplorer.current?.getFocusedItemDOM(newPath);
+                                currentItemDOM?.scrollIntoView({ behavior: "smooth" });
+                            }, 200);
+                        }} />
+                        <FileRichSelector
+                            nodes={localFsNodes}
+                            onItemToggled={(itemInfo) => {
+                                onLocalItemToggled && onLocalItemToggled(itemInfo);
+
+                                //Response to the breadcrumbs against to the RichFileSelector
+                                setLocalPath(itemInfo.path);
+                            }}
+                            ref={refLocalFileExplorer}
+                            sx={{ height: `${transferPanelHeight}vh`, maxHeight: `${transferPanelHeight}vh`, overflow: 'auto' }} />
                     </Paper>
                 </Grid>
 
@@ -171,12 +357,12 @@ export const FileExplorer = () => {
                 <Grid container xs={1} >
                     <Stack sx={{ flexGrow: "1", alignCenter: "center", justifyContent: "center" }} >
                         <Tooltip arrow  placement="top" title="Upload files" >
-                            <RectIconButton color="default" onClick={handleUpload} >
+                            <RectIconButton color="default" onClick={handleUpload} disabled={isUploadDisabled} >
                                 <KeyboardDoubleArrowRightIcon />
                             </RectIconButton>
                         </Tooltip>
                         <Tooltip arrow placement="bottom" title="Download files">
-                            <RectIconButton color="default" onClick={handleDownload} >
+                            <RectIconButton color="default" onClick={handleDownload} disabled={isDownloadDisabled} >
                                 <KeyboardDoubleArrowLeftIcon />
                             </RectIconButton>
                         </Tooltip>
@@ -194,27 +380,41 @@ export const FileExplorer = () => {
                         }}>
                             <Typography variant="h6">Remote Host</Typography>
                             <Box>
-                                <IconButton>
-                                    <CreateNewFolderIcon />
-                                </IconButton>
-                                <IconButton>
-                                    <DriveFileMoveIcon />
-                                </IconButton>
-                                <IconButton>
-                                    <DeleteForeverIcon />
-                                </IconButton>
+                                <Tooltip arrow placement="top-start" title="Reload remote file system">
+                                    <IconButton onClick={() => {
+                                        //Initialize the remote file system nodes
+                                        refRemoteFileExplorer.current?.resetAll();
+                                        setRemoteFsNodes([]);
+                                        setRemotePath('/');
+
+                                        //Refresh new pathes
+                                        onRemoteRefresh && onRemoteRefresh();
+                                    }}>
+                                        <RefreshIcon />
+                                    </IconButton>
+                                </Tooltip>
                             </Box>
                         </Box>                        
-                        {renderBreadcrumbs(remotePath, handleRemotePathChange)}
-                        <SimpleTreeView sx={{ height: `${transferPanelHeight}vh`, maxHeight: `${transferPanelHeight}vh`, overflow: 'auto' }}>
-                            <TreeItem itemId="6" label="Folder C">
-                                <TreeItem itemId="7" label="Subfolder C1" onClick={() => handleRemotePathChange('Subfolder C1')} />
-                                <TreeItem itemId="8" label="Subfolder C2" onClick={() => handleRemotePathChange('Subfolder C2')} />
-                            </TreeItem>
-                            <TreeItem itemId="9" label="Folder D">
-                                <TreeItem itemId="10" label="File D1.txt" />
-                            </TreeItem>
-                        </SimpleTreeView>
+                        <FileBreadcrumbs path={remotePath} handlePathChange={(e, newPath) => {
+                            //console.log(newPath);
+                            refRemoteFileExplorer.current?.setItemFocused(e, newPath);
+
+                            //Scroll to the clicked item
+                            setTimeout(() => {
+                                const currentItemDOM = refRemoteFileExplorer.current?.getFocusedItemDOM(newPath);
+                                currentItemDOM?.scrollIntoView({ behavior: "smooth" });
+                            }, 200);
+                        }} />
+                        <FileRichSelector
+                            nodes={remoteFsNodes}
+                            onItemToggled={(itemInfo) => {                                
+                                onRemoteItemToggled && onRemoteItemToggled(itemInfo);
+
+                                //Response to the breadcrumbs against to the RichFileSelector
+                                setRemotePath(itemInfo.path);
+                            }}
+                            ref={refRemoteFileExplorer}
+                            sx={{ height: `${transferPanelHeight}vh`, maxHeight: `${transferPanelHeight}vh`, overflow: 'auto' }} />
                     </Paper>
                 </Grid>
             </Grid>
@@ -223,31 +423,31 @@ export const FileExplorer = () => {
                     <Grid item xs={3} sx={{ display: "flex", justifyContent: "space-between", paddingRight: "8px" }} >
                         <Typography component="span" >Upload Process</Typography>
                         <Stack spacing={2} direction="row" sx={{ display: "inline-flex" }} >
-                            <Badge badgeContent={4} color="primary">
+                            <Badge badgeContent={uploadBadgeCount} color="primary">
                                 <FileUploadIcon color="action" />
                             </Badge>
                         </Stack>
                     </Grid>
                     <Grid item xs={9} >
-                        <LinearProgressWithLabel value={upProgress} />
+                        <LinearProgressWithLabel value={uploadProgress} />
                     </Grid>
                 </Grid>
                 <Grid container spacing={1} >
                     <Grid item xs={3} sx={{ display: "flex", justifyContent: "space-between", paddingRight: "8px" }} >
                         <Typography component="span" >Download Process</Typography>
                         <Stack spacing={2} direction="row" sx={{ display: "inline-flex" }} >
-                            <Badge badgeContent={4} color="primary">
+                            <Badge badgeContent={downloadBadgeCount} color="primary">
                                 <FileDownloadIcon color="action" />
                             </Badge>
                         </Stack>
                     </Grid>
                     <Grid item xs={9} >
-                        <LinearProgressWithLabel value={upProgress} />
+                        <LinearProgressWithLabel value={downloadProgress} />
                     </Grid>
                 </Grid>
             </Stack>
         </>
     );
-};
+});
 
 export default FileExplorer;

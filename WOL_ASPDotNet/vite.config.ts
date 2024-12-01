@@ -56,6 +56,9 @@ export default defineConfig(async () => {
 
     const config: UserConfig = {
         appType: 'custom',
+        esbuild: {
+            target: "esnext"
+        },
         plugins: [
             { enforce: 'pre', ...mdx() },
             react({ include: /\.(mdx|js|jsx|ts|tsx)$/ })
@@ -103,6 +106,7 @@ export default defineConfig(async () => {
             alias: [
                 { find: '@styles', replacement: fileURLToPath(new URL(`./${root}/styles`, import.meta.url)) },
                 { find: '@components', replacement: fileURLToPath(new URL(`./${root}/components`, import.meta.url)) },
+                { find: '@extensions', replacement: fileURLToPath(new URL(`./${root}/extensions`, import.meta.url)) },
                 { find: '@assets', replacement: fileURLToPath(new URL(`./${root}/assets`, import.meta.url)) },
                 { find: '@models', replacement: fileURLToPath(new URL(`./${root}/models`, import.meta.url)) },
                 { find: '@utilities', replacement: fileURLToPath(new URL(`./${root}/utilities`, import.meta.url)) }

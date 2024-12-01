@@ -1,4 +1,4 @@
-﻿import React, { useState, useContext } from 'react';
+﻿import React, { useState, useContext, forwardRef } from 'react';
 import { Routes, Route, useNavigate } from 'react-router-dom';
 
 
@@ -39,17 +39,16 @@ import { MESSAGE_STATUS, ResponseMessage } from '@models/ResponseMessage';
 import { AuthContext, AuthDispatchContext, AuthActionKind } from '@components/AuthContext';
 
 
-
 type ApiResponse = ResponseMessage<any>;
 
-export default function MenuAppBar() {
+export const HomePage = forwardRef((_props, _ref) => {
     const [anchorEl, setAnchorEl] = useState<Nullable<HTMLElement>>(null);
     const [drawerOpen, setDrawerOpen] = useState<boolean>(false);
 
     const navigate = useNavigate();
 
     const navigateTo = (route: string) => {
-        navigate(route, { replace: true});
+        navigate(route, { replace: true });
         setDrawerOpen(false);
     }
 
@@ -75,10 +74,12 @@ export default function MenuAppBar() {
 
     return (
         <>
-            <Box sx={{ 
-                display: 'flex',
-                flexGrow: 1 
-            }}>
+            <Box
+                sx={{
+                    display: 'flex',
+                    flexGrow: 1
+                }}
+            >
                 <AppBar position="fixed" sx={{
                     backgroundColor: "#03AED2",
                     zIndex: (theme) => theme.zIndex.drawer + 1
@@ -89,7 +90,7 @@ export default function MenuAppBar() {
                             edge="start"
                             color="inherit"
                             sx={{ mr: 2 }}
-                            onClick={() => { setDrawerOpen(!drawerOpen); } }
+                            onClick={() => { setDrawerOpen(!drawerOpen); }}
                         >
                             <MenuIcon />
                         </IconButton>
@@ -100,7 +101,7 @@ export default function MenuAppBar() {
                                 flexGrow: 1
                             }} >
                             <IconButton sx={{
-                                color: "inherit",                                
+                                color: "inherit",
                                 borderRadius: "0",
                                 "&:hover": {
                                     backgroundColor: 'transparent'
@@ -171,7 +172,6 @@ export default function MenuAppBar() {
                                 }}>Log out</MenuItem>
                             </Menu>
                         </Box>
-                        
                     </Toolbar>
                 </AppBar>
 
@@ -223,8 +223,8 @@ export default function MenuAppBar() {
                                 <ListItemText primary="System Settings" />
                             </ListItemButton>
                         </ListItem>
-                    </List>                    
-                </Drawer>                
+                    </List>
+                </Drawer>
             </Box>
 
             <Box component="main" sx={{ flexGrow: 1, p: 3 }}>
@@ -242,7 +242,7 @@ export default function MenuAppBar() {
                     sx={{
                         display: "flex",
                         justifyContent: "center",
-                        alignItems : "center",
+                        alignItems: "center",
                         position: "fixed",
                         padding: "0",
                         paddingBottom: "2px",
@@ -269,7 +269,9 @@ export default function MenuAppBar() {
                         Just turn off your hosts when no need to use.
                     </Typography>
                 </Box>
-            </Box>        
-        </>        
+            </Box>
+        </>
     );
-}
+});
+
+export default HomePage;
