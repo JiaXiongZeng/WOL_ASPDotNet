@@ -1,4 +1,5 @@
 ﻿import { useState, useRef, useEffect, useCallback } from 'react';
+import { useImmer } from 'use-immer';
 import { useNavigate, useLocation } from 'react-router-dom';
 import Guacamole from 'guacamole-common-js';
 import { Mimetype } from 'guacamole-common-js/lib/GuacCommon';
@@ -16,17 +17,22 @@ import OpenInFullIcon from '@mui/icons-material/OpenInFull';
 import CloseFullscreenIcon from '@mui/icons-material/CloseFullscreen';
 import PowerOffIcon from '@mui/icons-material/PowerOff';
 import FileCopyIcon from '@mui/icons-material/FileCopy';
-
 import { FullScreen, useFullScreenHandle } from "react-full-screen";
-import CustomizedDialog, { CustomizedDialogHandler } from '@components/CustomizedDialog';
-import { FileExplorer, FileExplorerHandler, LocalFsNodeType } from '@components/FileExplorer';
-import { GatewayParametersViewModel } from '@models/GatewayParametersViewModel';
 
 import axios from 'axios';
 import * as lodash from 'lodash';
-
+import { v4 as uuidV4 } from 'uuid';
 import { showDirectoryPicker, FileSystemDirectoryHandle } from 'native-file-system-adapter';
+import { PromisePool } from '@supercharge/promise-pool';
+import dayjs from 'dayjs';
+
+import CustomizedDialog, { CustomizedDialogHandler } from '@components/CustomizedDialog';
+import { FileExplorer, FileExplorerHandler, LocalFsNodeType } from '@components/FileExplorer';
+import { GatewayParametersViewModel } from '@models/GatewayParametersViewModel';
+import { TransferTask, genHumanlikeSizeDesc, getFileName } from '@models/TransferTask';
 import { FrontendFileHandleUtil, FileToBlob } from '@utilities/FrontendFileHandleUtility';
+import { MakePromise } from '@utilities/PromiseUtility';
+
 
 const styles = {
     arrow: {
@@ -92,39 +98,16 @@ const StyledPopper = styled(Popper)(({ theme }) => ({ // You can replace with `P
     },
 }));
 
-//const base64ToByteCharacters = (base64String: string) => {
-//    const base64WithoutPrefix = base64String.split(',')[1] || base64String;
-//    const result = atob(base64WithoutPrefix);
-//    return result;
-//}
-
-//const base64ToByteNumbers = (base64String: string) => {
-//    const byteCharacters = base64ToByteCharacters(base64String);
-//    const byteNumbers = new Uint8Array(byteCharacters.length);
-
-//    for (let i = 0; i < byteCharacters.length; i++) {
-//        byteNumbers[i] = byteCharacters.charCodeAt(i);
-//    }
-//    return byteNumbers;
-//}
-
-//const base64ToBlob = (base64String: string, mimeType: string) => {
-//    const byteNumbers = base64ToByteNumbers(base64String);
-//    return new Blob([byteNumbers], { type: mimeType });
-//}
-
-//const blobToBase64 = (blob: Blob) => {
-//    return new Promise<string>((res, _) => {
-//        const reader = new FileReader();
-//        reader.onloadend = () => res(reader.result as string);
-//        reader.readAsDataURL(blob);
-//    });
-//}
-
+//OnBody event handle arugment type
 type OnBodyArgs = {
     inStream: Guacamole.InputStream,
     mimeType: Mimetype,
     path: string,
+    task?: TransferTask,
+    promiseExecutor?: {
+        resolve: (value: unknown) => void,
+        reject: (reason?: any) => void
+    }
     onDownloadSuccess?: () => void,
     onDownloadFailed?: (e: unknown) => void,
     onDownloadFinished?: () => void
@@ -159,6 +142,12 @@ const RemoteGateway = () => {
 
     const refLocalFileExpRoot = useRef<Nullable<FileSystemDirectoryHandle>>(null);
 
+    const [downloadTasks, setDownloadTasks] = useImmer<TransferTask[]>([]);
+    const [isDownloading, setIsDownloading] = useState(false);
+
+    const [uploadTasks, setUploadTasks] = useImmer<TransferTask[]>([]);
+    const [isUploading, setIsUploading] = useState(false);
+
     const resizeScreen = useCallback(
         lodash.debounce(() => {
             const GUAC_WIDTH = Math.round(window.innerWidth - (!isFullScreen ? occupaciedWidth: 5));
@@ -171,6 +160,8 @@ const RemoteGateway = () => {
     , [isFullScreen]);
 
     const onBody = async ({ inStream, mimeType, path,
+                            task,
+                            promiseExecutor,
                             onDownloadSuccess, 
                             onDownloadFailed,
                             onDownloadFinished }: OnBodyArgs) => {
@@ -178,6 +169,53 @@ const RemoteGateway = () => {
         inStream.sendAck("OK", Guacamole.Status.Code.SUCCESS);
 
         const blobReader = new Guacamole.BlobReader(inStream, mimeType);
+
+        //查看下載進度
+        blobReader.onprogress = lodash.throttle((_length) => {
+            if (!task) return;
+            //只看檔案下載Size，資料夾結構Json不用看
+            if (mimeType.indexOf('stream-index+json') == -1) {
+                setDownloadTasks((draft) => {
+                    const theTask = lodash.find(draft, x => x.Id == task.Id);
+                    if (!theTask) return;
+                    if (!theTask.CurrentTransStatus) return;
+
+                    theTask.PreviousTransStatus = {
+                        //前次紀錄的下載Size
+                        ProcessedSize: theTask.CurrentTransStatus.ProcessedSize,
+                        //前次紀錄的時間
+                        TriggerTime: theTask.CurrentTransStatus.TriggerTime
+                    };
+
+                    theTask.CurrentTransStatus = {
+                        //目前下載的Size
+                        ProcessedSize: blobReader.getLength(),
+                        //當下的時間
+                        TriggerTime: new Date()
+                    };
+
+                    /**  Calculate the time difference  **/
+                    const dateCurrent = dayjs(theTask.CurrentTransStatus.TriggerTime);
+                    const datePrevious = dayjs(theTask.PreviousTransStatus.TriggerTime);
+                    //The miminal observation interval is 1 second
+                    const diffSeconds = dateCurrent.diff(datePrevious, 'second') || 1;
+
+                    /**  Calculate the size difference  **/
+                    const sizeCurrent = theTask.CurrentTransStatus.ProcessedSize;
+                    const sizePrevious = theTask.PreviousTransStatus.ProcessedSize;
+                    const diffSize = sizeCurrent - sizePrevious!;
+
+                    /** Generate the humanlike data transfer information **/
+                    const transferRate = Math.ceil(diffSize / diffSeconds);
+                    const hmlSize = genHumanlikeSizeDesc(theTask.CurrentTransStatus.ProcessedSize);
+                    const hmlRate = genHumanlikeSizeDesc(transferRate);
+                    theTask.TotalSize = `${hmlSize.Size} ${hmlSize.Unit}`;
+                    theTask.TransferRate = `${hmlRate.Size} ${hmlRate.Unit}`;
+
+                    console.log(`[${theTask.Action}] File name: "${theTask.FileName}", Total Size: ${theTask.TotalSize}, Transfer Rate: ${theTask.TransferRate}`);
+                });
+            }
+        }, 1000, { trailing: true });
 
         blobReader.onend = () => {
             const doDownload = async () => {
@@ -193,7 +231,6 @@ const RemoteGateway = () => {
                             //console.log(`${path}\n`);
                             //console.log(await blob.text());
 
-                            //Customize an event for onFileDownloaded(fileMap { groupId, filePathes: [] })
                             const folderNodes = refFileExplorer.current?.getLocalSelectedFolderNodes();
                             lodash.forEach(folderNodes, async (node) => {
                                 const dirHandle = await FrontendFileHandleUtil.getNestedDirectoryHandle(refLocalFileExpRoot.current!, node.id);
@@ -208,23 +245,124 @@ const RemoteGateway = () => {
 
                                 //Call on download success callback (Maybe some promise in it)
                                 onDownloadSuccess && onDownloadSuccess();
+
+                                //Promise resolve
+                                promiseExecutor && promiseExecutor.resolve("Success");
                             });
                         } catch (e) {
                             //Call on download failed callback (Maybe some promise in it)
                             onDownloadFailed && onDownloadFailed(e);
                             console.log(e);
+
+                            //Promise reject
+                            promiseExecutor && promiseExecutor.reject(e);
                         } finally {
                             //No matter download success or failed call the finished callback
                             onDownloadFinished && onDownloadFinished();
                         }
                     }
                 } catch (e) {
+                    //Promise reject
+                    promiseExecutor && promiseExecutor.reject(e);
+
                     console.log(e);
                 }
             }
             doDownload();
         }
     }
+
+    useEffect(() => {
+        if (isDownloading) {
+            const queueTasksInPool = async () => {
+                await PromisePool.for(downloadTasks)
+                    .withConcurrency(4)
+                    .useCorrespondingResults()
+                    .onTaskStarted((item, _pool) => {
+                        setDownloadTasks(draft => {
+                            const theTask = lodash.find(draft, x => x.Id == item.Id)!;
+                            theTask.CurrentTransStatus = {
+                                ProcessedSize: 0,
+                                TriggerTime: new Date()
+                            };
+                            theTask.PreviousTransStatus = { ...theTask.CurrentTransStatus };
+                            theTask.TaskStatus = 'Running';
+                        });
+                    })
+                    .onTaskFinished((item, pool) => {
+                        setDownloadTasks(draft => {
+                            const theTask = lodash.find(draft, x => x.Id == item.Id)!;
+                            theTask.TaskStatus = 'Success';
+
+                            //Count the running tasks from badgeCount
+                            const badgeCount = lodash.filter(draft, x => x.TaskStatus == 'Running').length;
+
+                            refFileExplorer.current?.setDownloadProgress(pool.processedPercentage());
+                            refFileExplorer.current?.setDownloadBadgeCount(badgeCount);
+                        });
+                    })
+                    .handleError(async (_error, item) => {
+                        setDownloadTasks(draft => {
+                            const theTask = lodash.find(draft, x => x.Id == item.Id)!;
+                            theTask.TaskStatus = 'Error';
+                        });
+                    })
+                    .process(async (task, index, pool) => {
+                        await task.RunTask({ index, pool });
+                    });
+
+                setIsDownloading(false);
+                refFileExplorer.current?.setDownloadEnabled(true);
+            }
+            queueTasksInPool();
+        }
+    }, [isDownloading]);
+
+    useEffect(() => {
+        if (isUploading) {
+            const queueTasksInPool = async () => {
+                await PromisePool.for(uploadTasks)
+                    .withConcurrency(4)
+                    .useCorrespondingResults()
+                    .onTaskStarted((item, _pool) => {
+                        setUploadTasks(draft => {
+                            const theTask = lodash.find(draft, x => x.Id == item.Id)!;
+                            theTask.CurrentTransStatus = {
+                                ProcessedSize: 0,
+                                TriggerTime: new Date()
+                            };
+                            theTask.PreviousTransStatus = { ...theTask.CurrentTransStatus };
+                            theTask.TaskStatus = 'Running';
+                        });
+                    })
+                    .onTaskFinished((item, pool) => {
+                        setUploadTasks(draft => {
+                            const theTask = lodash.find(draft, x => x.Id == item.Id)!;
+                            theTask.TaskStatus = 'Success';
+
+                            //Count the running tasks from badgeCount
+                            const badgeCount = lodash.filter(draft, x => x.TaskStatus == 'Running').length;
+
+                            refFileExplorer.current?.setUploadProgress(pool.processedPercentage());
+                            refFileExplorer.current?.setUploadBadgeCount(badgeCount);
+                        });
+                    })
+                    .handleError(async (_error, item) => {
+                        setUploadTasks(draft => {
+                            const theTask = lodash.find(draft, x => x.Id == item.Id)!;
+                            theTask.TaskStatus = 'Error';
+                        })
+                    })
+                    .process(async (task, index, pool) => {
+                        await task.RunTask({ index, pool });
+                    });
+
+                setIsUploading(false);
+                refFileExplorer.current?.setUploadEnabled(true);
+            }
+            queueTasksInPool();
+        }
+    }, [isUploading]);
 
     useEffect(() => {
         window.addEventListener('resize', resizeScreen);
@@ -312,7 +450,7 @@ const RemoteGateway = () => {
         tunnel.onstatechange = (state) => {
             if (state == Guacamole.Tunnel.State.CLOSED) {
                 if (params.Type == "SSH") {
-                    navigateTo("/");                    
+                    navigateTo("/");
                 } else {
                     //If the type is not conosle related type,
                     //make a tolerence for 8 secs to leave(maybe some network jammed)
@@ -459,7 +597,7 @@ const RemoteGateway = () => {
                 <>
                     <FullScreen
                         handle={fullScreenHandle}
-                        onChange={(state) => {                            
+                        onChange={(state) => {
                             setIsFullScreen(state);
                         }} >
                         <Box component="div" {...bindHover(popupState)}
@@ -482,6 +620,8 @@ const RemoteGateway = () => {
                             <FileExplorer
                                 localFsRootName="/"
                                 remoteFsRootName="/"
+                                isUploadEnabled={!isUploading}
+                                isDownloadEnabled={!isDownloading}
                                 onLocalItemToggled={(itemInfo) => {
                                     if (itemInfo.fileType == "storage" || itemInfo.fileType == "folder") {
                                         (async () => {
@@ -575,16 +715,45 @@ const RemoteGateway = () => {
                                         return;
                                     }
 
-                                    //Request to download files from the remote host
-                                    lodash.forEach(filePathes, path => {
-                                        refFileSystem.current?.requestInputStream(path, (inStream, mimeType) => {
-                                            onBody({
-                                                inStream: inStream,
-                                                mimeType: mimeType,
-                                                path: path
-                                            });
+                                    setDownloadTasks(draft => {
+                                        //Clear all tasks from download task queue
+                                        draft.length = 0;
+
+                                        //Populate new tasks to task queue
+                                        lodash.forEach(filePathes, path => {
+                                            const newTask: TransferTask = {
+                                                Id: uuidV4(),
+                                                FileName: getFileName(path),
+                                                Action: 'Download',
+                                                TaskStatus: 'Queue',
+                                                RunTask: (/*{ index, pool }*/) => {
+                                                    //console.log(index);
+                                                    //console.log(pool);
+
+                                                    return MakePromise((resolve, reject) => {
+                                                        refFileSystem.current?.requestInputStream(path, (inStream, mimeType) => {
+                                                            onBody({
+                                                                inStream: inStream,
+                                                                mimeType: mimeType,
+                                                                path: path,
+                                                                task: newTask,
+                                                                promiseExecutor: {
+                                                                    resolve,
+                                                                    reject
+                                                                }
+                                                            });
+                                                        });
+                                                    });
+                                                }
+                                            };
+                                            draft.push(newTask);
                                         });
-                                    });                                    
+
+                                        setIsDownloading(true);
+                                        refFileExplorer.current?.setDownloadEnabled(false);
+                                        refFileExplorer.current?.setDownloadProgress(0);
+                                        refFileExplorer.current?.setDownloadBadgeCount(filePathes.length);
+                                    });
                                 }}
                                 onUpload={(filePathes) => {
                                     if (!refLocalFileExpRoot.current) {
@@ -617,43 +786,130 @@ const RemoteGateway = () => {
                                         modalHintRef.current?.setOpen(true);
                                         return;
                                     }
+                                    
+                                    //Request to upload files to the remote host
+                                    const lastDirNode = lodash.last(remoteDirNodes)!;
+                                    const destDirPath = lastDirNode.id;
 
-                                    //Request to uploaded files to the remote host
-                                    lodash.forEach(remoteDirNodes!, (node) => {
-                                        const destDirPath = node.id;
+                                    //The list of tasks for generating upload tasks
+                                    let promises: Promise<TransferTask>[] = [];
 
-                                        lodash.forEach(filePathes, async (path) => {
+                                    //Generate upload tasks
+                                    lodash.forEach(filePathes, path => {
+                                        const runAsync = async () => {
                                             const fileHandle = await FrontendFileHandleUtil.getNestedFileHandle(refLocalFileExpRoot.current!, path);
                                             const file = await fileHandle.getFile();
 
 
                                             const destFilePath = `${destDirPath}/${file.name}`;
 
-                                            const outStream = refFileSystem.current?.createOutputStream(file.type, destFilePath);
-                                            if (outStream) {
-                                                const blob = await FileToBlob(file);
-                                                const blobWriter = new Guacamole.BlobWriter(outStream);
+                                            const newTask: TransferTask = {
+                                                Id: uuidV4(),
+                                                FileName: file.name,
+                                                Action: 'Upload',
+                                                TaskStatus: 'Queue',
+                                                RunTask: (/*{ index, pool }*/) => {
+                                                    //console.log(index);
+                                                    //console.log(pool);
 
-                                                blobWriter.onerror = (_blob, _offset, error) => {
-                                                    //Close stream
-                                                    blobWriter.sendEnd();
-                                                    modalHintRef.current?.setContentPanel(
-                                                        <Typography variant="h6" gutterBottom>
-                                                            { `${file.name} uploaded failed! message: ${error.message}` }
-                                                        </Typography>
-                                                    )
-                                                    modalHintRef.current?.setOpen(true);
+                                                    return MakePromise(async (resolve, reject) => {
+                                                        const outStream = refFileSystem.current?.createOutputStream(file.type, destFilePath);
+                                                        if (outStream) {
+                                                            const blob = await FileToBlob(file);
+                                                            const blobWriter = new Guacamole.BlobWriter(outStream);
+
+                                                            //查看上傳進度
+                                                            blobWriter.onprogress = lodash.throttle((_blob, offset) => {
+                                                                setUploadTasks((draft) => {
+                                                                    const theTask = lodash.find(draft, x => x.Id == newTask.Id);
+                                                                    if (!theTask) return;
+                                                                    if (!theTask.CurrentTransStatus) return;
+
+                                                                    theTask.PreviousTransStatus = {
+                                                                        //前次紀錄的下載Size
+                                                                        ProcessedSize: theTask.CurrentTransStatus.ProcessedSize,
+                                                                        //前次紀錄的時間
+                                                                        TriggerTime: theTask.CurrentTransStatus.TriggerTime
+                                                                    };
+
+                                                                    theTask.CurrentTransStatus = {
+                                                                        //目前下載的Size
+                                                                        ProcessedSize: offset,
+                                                                        //當下的時間
+                                                                        TriggerTime: new Date()
+                                                                    };
+
+                                                                    /**  Calculate the time difference  **/
+                                                                    const dateCurrent = dayjs(theTask.CurrentTransStatus.TriggerTime);
+                                                                    const datePrevious = dayjs(theTask.PreviousTransStatus.TriggerTime);
+                                                                    //The miminal observation interval is 1 second
+                                                                    const diffSeconds = dateCurrent.diff(datePrevious, 'second') || 1;
+
+                                                                    /**  Calculate the size difference  **/
+                                                                    const sizeCurrent = theTask.CurrentTransStatus.ProcessedSize;
+                                                                    const sizePrevious = theTask.PreviousTransStatus.ProcessedSize;
+                                                                    const diffSize = sizeCurrent - sizePrevious!;
+
+                                                                    /** Generate the humanlike data transfer information **/
+                                                                    const transferRate = Math.ceil(diffSize / diffSeconds);
+                                                                    const hmlSize = genHumanlikeSizeDesc(theTask.CurrentTransStatus.ProcessedSize);
+                                                                    const hmlRate = genHumanlikeSizeDesc(transferRate);
+                                                                    theTask.TotalSize = `${hmlSize.Size} ${hmlSize.Unit}`;
+                                                                    theTask.TransferRate = `${hmlRate.Size} ${hmlRate.Unit}`;
+
+                                                                    console.log(`[${theTask.Action}] File name: "${theTask.FileName}", Total Size: ${theTask.TotalSize}, Transfer Rate: ${theTask.TransferRate}`);
+                                                                });
+                                                            }, 1000, { trailing: true });
+
+                                                            blobWriter.onerror = (_blob, _offset, error) => {
+                                                                //Close stream
+                                                                blobWriter.sendEnd();
+
+                                                                //Promise reject
+                                                                reject(error);
+
+                                                                modalHintRef.current?.setContentPanel(
+                                                                    <Typography variant="h6" gutterBottom>
+                                                                        {`${file.name} uploaded failed! message: ${error.message}`}
+                                                                    </Typography>
+                                                                )
+                                                                modalHintRef.current?.setOpen(true);
+                                                            }
+
+                                                            blobWriter.oncomplete = (_blob) => {
+                                                                //Close stream
+                                                                blobWriter.sendEnd();
+
+                                                                //Promise resolve
+                                                                resolve("Success");
+                                                            }
+
+                                                            blobWriter.sendBlob(blob);
+                                                        }
+                                                    });
                                                 }
-
-                                                blobWriter.oncomplete = (_blob) => {
-                                                    //Close stream
-                                                    blobWriter.sendEnd();
-                                                }
-
-                                                blobWriter.sendBlob(blob);
-                                            }
-                                        });
+                                            };
+                                            return newTask;
+                                        };
+                                        promises.push(runAsync());
                                     });
+
+                                    //When all tasks ready, populating them to the task queue
+                                    Promise.all(promises)
+                                        .then(tasks => {
+                                            setUploadTasks(draft => {
+                                                //Clear all tasks from upload task queue
+                                                draft.length = 0;
+
+                                                //Push elements
+                                                draft.push(...tasks);
+
+                                                setIsUploading(true);
+                                                refFileExplorer.current?.setUploadEnabled(false);
+                                                refFileExplorer.current?.setUploadProgress(0);
+                                                refFileExplorer.current?.setUploadBadgeCount(filePathes.length);
+                                            });
+                                        });
                                 }}
                                 ref={refFileExplorer} />
                         </CustomizedDialog>
@@ -663,7 +919,7 @@ const RemoteGateway = () => {
                             open={false}
                             ref={modalHintRef} >
                         </CustomizedDialog>
-                    </FullScreen>                    
+                    </FullScreen>
                     <StyledPopper
                         {...bindPopper(popupState)}
                         placement="top"
@@ -767,7 +1023,7 @@ const RemoteGateway = () => {
                                             </IconButton>
                                         </Tooltip>
                                     </Box>
-                                </Paper>                                
+                                </Paper>
                             </Slide>
                         )}
                     </StyledPopper>

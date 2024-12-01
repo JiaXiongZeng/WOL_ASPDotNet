@@ -1,5 +1,5 @@
 ﻿import {
-    useState, useEffect, useRef,
+    useState, useRef,
     forwardRef, useImperativeHandle
 } from 'react';
 
@@ -117,7 +117,9 @@ export interface FileExplorerProps {
     onLocalItemToggled?: (itemInfo: ItemInfo) => void,
     onLocalRefresh?: () => void,
     onDownload?: (filePathes: string[]) => void,
-    onUpload?: (filePathes: string[]) => void
+    onUpload?: (filePathes: string[]) => void,
+    isDownloadEnabled: boolean,
+    isUploadEnabled: boolean
 }
 
 export type FileExplorerHandler = {
@@ -128,7 +130,13 @@ export type FileExplorerHandler = {
     getLocalSelectedNodes: () => TreeViewBaseItem<ExtendedTreeItemProps>[],
     getLocalSelectedFolderNodes: () => TreeViewBaseItem<ExtendedTreeItemProps>[],
     getRemoteSelectedNodes: () => TreeViewBaseItem<ExtendedTreeItemProps>[],
-    getRemoteSelectedFolderNodes: () => TreeViewBaseItem<ExtendedTreeItemProps>[]
+    getRemoteSelectedFolderNodes: () => TreeViewBaseItem<ExtendedTreeItemProps>[],
+    setDownloadEnabled: (isEnable: boolean) => void,
+    setUploadEnabled: (isEnable: boolean) => void,
+    setDownloadProgress: (percentage: number) => void,
+    setUploadProgress: (percentage: number) => void,
+    setDownloadBadgeCount: (count: number) => void,
+    setUploadBadgeCount: (count: number) => void
 }
 
 export const FileExplorer = forwardRef<FileExplorerHandler, FileExplorerProps>((props, ref) => {
@@ -137,7 +145,8 @@ export const FileExplorer = forwardRef<FileExplorerHandler, FileExplorerProps>((
         localFsRootName, remoteFsRootName,
         onLocalItemToggled, onLocalRefresh,
         onRemoteItemToggled, onRemoteRefresh,
-        onDownload, onUpload
+        onDownload, onUpload,
+        isDownloadEnabled, isUploadEnabled
     } = props;
     
     const refLocalFileExplorer = useRef<FileRichSelectorHandler>(null);
@@ -148,39 +157,33 @@ export const FileExplorer = forwardRef<FileExplorerHandler, FileExplorerProps>((
     const [localPath, setLocalPath] = useState(localFsRootName);
     const [remotePath, setRemotePath] = useState(remoteFsRootName);
 
-    //Data Transfer Progress
-    const [upProgress, setUpProgress] = useState(10);
-    const [downProgress, setDownProgress] = useState(10);
+    //Data Transfer Badge
+    const [uploadBadgeCount, setUploadBadgeCount] = useState(0);
+    const [downloadBadgeCount, setDownloadBadgeCount] = useState(0);
 
+    //Data Transfer Progress
+    const [uploadProgress, setUploadProgress] = useState(0);
+    const [downloadProgress, setDownloadProgress] = useState(0);
+
+    //Availabitity for download / upload buttons
+    const [isUploadDisabled, setIsUploadDisabled] = useState(!isUploadEnabled);
+    const [isDownloadDisabled, setIsDownloadDisabled] = useState(!isDownloadEnabled);
+
+    //Nodes for download / upload treeviews
     const [localFsNodes, setLocalFsNodes] = useImmer<TreeViewBaseItem<ExtendedTreeItemProps>[]>([]);
     const [remoteFsNodes, setRemoteFsNodes] = useImmer<TreeViewBaseItem<ExtendedTreeItemProps>[]>([]);
 
-
+    //Event handle for upload
     const handleUpload = () => {
         const filePathes = refLocalFileExplorer.current?.getSelectedFilePathes();
         onUpload && onUpload(filePathes || []);
-
-        //Remember to update LinearProgressWithLabel
     };
 
+    //Event handle for download
     const handleDownload = () => {
         const filePathes = refRemoteFileExplorer.current?.getSelectedFilePathes();
         onDownload && onDownload(filePathes || []);
-
-        //Remember to update LinearProgressWithLabel
     };
-
-
-    useEffect(() => {
-        const timer = setInterval(() => {
-            setUpProgress((prevProgress) => (prevProgress >= 100 ? 10 : prevProgress + 10));
-            setDownProgress((prevProgress) => (prevProgress >= 100 ? 10 : prevProgress + 10));
-        }, 800);
-        return () => {
-            clearInterval(timer);
-        };
-    }, []);
-
 
     useImperativeHandle(ref, () => ({
         renewLocalFsNodes: (rowFilePathes: Record<string, LocalFsNodeType>) => {
@@ -278,6 +281,24 @@ export const FileExplorer = forwardRef<FileExplorerHandler, FileExplorerProps>((
         },
         getRemoteSelectedFolderNodes: () => {
             return refRemoteFileExplorer.current?.getSelectedFolderNodes() || [];
+        },
+        setDownloadEnabled: (isEnabled) => {
+            setIsDownloadDisabled(!isEnabled);
+        },
+        setUploadEnabled: (isEnabled) => {
+            setIsUploadDisabled(!isEnabled);
+        },        
+        setDownloadProgress: (percentage) => {
+            setDownloadProgress(percentage);
+        },
+        setUploadProgress: (percentage) => {
+            setUploadProgress(percentage);
+        },
+        setDownloadBadgeCount: (count) => {
+            setDownloadBadgeCount(count);
+        },
+        setUploadBadgeCount: (count) => {
+            setUploadBadgeCount(count);
         }
     }), [ localFsNodes, remoteFsNodes ]);
 
@@ -336,12 +357,12 @@ export const FileExplorer = forwardRef<FileExplorerHandler, FileExplorerProps>((
                 <Grid container xs={1} >
                     <Stack sx={{ flexGrow: "1", alignCenter: "center", justifyContent: "center" }} >
                         <Tooltip arrow  placement="top" title="Upload files" >
-                            <RectIconButton color="default" onClick={handleUpload} >
+                            <RectIconButton color="default" onClick={handleUpload} disabled={isUploadDisabled} >
                                 <KeyboardDoubleArrowRightIcon />
                             </RectIconButton>
                         </Tooltip>
                         <Tooltip arrow placement="bottom" title="Download files">
-                            <RectIconButton color="default" onClick={handleDownload} >
+                            <RectIconButton color="default" onClick={handleDownload} disabled={isDownloadDisabled} >
                                 <KeyboardDoubleArrowLeftIcon />
                             </RectIconButton>
                         </Tooltip>
@@ -402,26 +423,26 @@ export const FileExplorer = forwardRef<FileExplorerHandler, FileExplorerProps>((
                     <Grid item xs={3} sx={{ display: "flex", justifyContent: "space-between", paddingRight: "8px" }} >
                         <Typography component="span" >Upload Process</Typography>
                         <Stack spacing={2} direction="row" sx={{ display: "inline-flex" }} >
-                            <Badge badgeContent={4} color="primary">
+                            <Badge badgeContent={uploadBadgeCount} color="primary">
                                 <FileUploadIcon color="action" />
                             </Badge>
                         </Stack>
                     </Grid>
                     <Grid item xs={9} >
-                        <LinearProgressWithLabel value={upProgress} />
+                        <LinearProgressWithLabel value={uploadProgress} />
                     </Grid>
                 </Grid>
                 <Grid container spacing={1} >
                     <Grid item xs={3} sx={{ display: "flex", justifyContent: "space-between", paddingRight: "8px" }} >
                         <Typography component="span" >Download Process</Typography>
                         <Stack spacing={2} direction="row" sx={{ display: "inline-flex" }} >
-                            <Badge badgeContent={4} color="primary">
+                            <Badge badgeContent={downloadBadgeCount} color="primary">
                                 <FileDownloadIcon color="action" />
                             </Badge>
                         </Stack>
                     </Grid>
                     <Grid item xs={9} >
-                        <LinearProgressWithLabel value={downProgress} />
+                        <LinearProgressWithLabel value={downloadProgress} />
                     </Grid>
                 </Grid>
             </Stack>
