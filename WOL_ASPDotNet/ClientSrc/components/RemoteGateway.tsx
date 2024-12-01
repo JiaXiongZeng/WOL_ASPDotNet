@@ -612,6 +612,8 @@ const RemoteGateway = () => {
                         </Box>
                         <CustomizedDialog
                             title="Data Transfer"
+                            dragable={true}
+                            showMinimize={true}
                             open={false}
                             showClose={true}
                             maxWidth="md"
