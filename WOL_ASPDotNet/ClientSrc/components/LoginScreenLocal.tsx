@@ -1,5 +1,5 @@
-﻿import { FormEvent, useState, useContext, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+﻿import { FormEvent, useState, useEffect, useContext, useRef } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import styled from '@mui/material/styles/styled';
 import blue from '@mui/material/colors/blue';
 
@@ -50,6 +50,7 @@ export const LoginScreenLocal = () => {
     const configDispatch = useContext(ConfigDispatchContext);
     const authDispatch = useContext(AuthDispatchContext);
     const navigate = useNavigate();
+    const { state } = useLocation();
 
     const modalRef = useRef<CustomizedDialogHandler>(null);
 
@@ -113,6 +114,20 @@ export const LoginScreenLocal = () => {
                 modalRef.current?.setOpen(true);
             });
     };
+
+    //Display the message making log out accidently
+    useEffect(() => {
+        const { message } = state || {};
+        if (message) {
+            modalRef.current?.setContentPanel
+                (
+                    <Typography gutterBottom>
+                        {message}
+                    </Typography>
+                );
+            modalRef.current?.setOpen(true);
+        }
+    }, []);
 
     return (
       <Container component="main" maxWidth="xs">

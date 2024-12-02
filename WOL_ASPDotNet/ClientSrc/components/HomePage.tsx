@@ -1,4 +1,4 @@
-﻿import React, { useState, useContext, forwardRef } from 'react';
+﻿import React, { useState, useEffect, useContext, forwardRef } from 'react';
 import { Routes, Route, useNavigate } from 'react-router-dom';
 
 
@@ -35,6 +35,8 @@ import UserProfile from '@components/UserProfile';
 import RemoteGateway from '@components/RemoteGateway';
 
 import axios from 'axios';
+import * as lodash from 'lodash';
+
 import { MESSAGE_STATUS, ResponseMessage } from '@models/ResponseMessage';
 import { AuthContext, AuthDispatchContext, AuthActionKind } from '@components/AuthContext';
 
@@ -47,8 +49,8 @@ export const HomePage = forwardRef((_props, _ref) => {
 
     const navigate = useNavigate();
 
-    const navigateTo = (route: string) => {
-        navigate(route, { replace: true });
+    const navigateTo = (route: string, state?: any) => {
+        navigate(route, { replace: true, state: state});
         setDrawerOpen(false);
     }
 
@@ -71,6 +73,27 @@ export const HomePage = forwardRef((_props, _ref) => {
             return Promise.reject(error);
         }
     });
+
+    //Blur & check session is alive per 1 minutes while mousemoving
+    const timeSpan = 60; //seconds
+    const blurSession = lodash.throttle(() => {
+        axios.get<boolean>('/Identity/IsSessionAlive')
+            .then(resp => {
+                const respData = resp.data;
+                const isAlive = respData;
+                if (!isAlive) {
+                    navigateTo("/Login", { message: "The session was expired!" });
+                }
+            });
+    }, timeSpan * 1000);
+
+    useEffect(() => {
+        window.addEventListener('mousemove', blurSession);
+
+        return () => {
+            window.removeEventListener('mousemove', blurSession);
+        }
+    }, []);
 
     return (
         <>
