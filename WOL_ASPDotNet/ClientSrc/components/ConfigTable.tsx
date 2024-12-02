@@ -1,4 +1,4 @@
-﻿import { useEffect, useState, useRef } from 'react';
+﻿import { useEffect, useState, useRef, useContext } from 'react';
 import { useForm, Controller, SubmitHandler } from "react-hook-form";
 import axios from 'axios';
 
@@ -23,10 +23,13 @@ import { type DeviceInfo } from '@models/DeviceInfoViewModel';
 import CustomizedDialog, { CustomizedDialogHandler } from '@components/CustomizedDialog';
 import { ResponseMessage, MESSAGE_STATUS } from '@models/ResponseMessage';
 import { Configurations } from '@models/Configurations';
+import { ConfigDispatchContext, ConfigActionKind } from '@components/ConfigContext';
 
 import { /*defaultNull,*/ removeEmptyFields } from '@utilities/FormUtility';
 
 export const ConfigTable = () => {
+    const configDispatch = useContext(ConfigDispatchContext);
+
     const [deviceList, setDeviceList] = useState<Nullable<DeviceInfo[]>>(null);
 
     const modalRef = useRef<CustomizedDialogHandler>(null);
@@ -40,6 +43,12 @@ export const ConfigTable = () => {
             const respData = response.data;
             if (respData.Attachment) {
                 reset(response.data.Attachment);
+
+                //Reset the global configuration used by whole APP scope
+                configDispatch!({
+                    actionKind: ConfigActionKind.SET,
+                    args: [respData.Attachment]
+                });
             }
         });
     };
