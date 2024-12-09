@@ -1,6 +1,5 @@
 ﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using System.Net.Mail;
 using WOL_ASPDotNet.Infrastructure.Base;
 using WOL_ASPDotNet.Infrastructure.Enums;
 using WOL_ASPDotNet.Models.Entities;

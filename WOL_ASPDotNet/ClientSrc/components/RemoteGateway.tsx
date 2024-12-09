@@ -540,20 +540,40 @@ const RemoteGateway = () => {
             if (params.Type == "RDP") {
                 //Log in related
                 argumentsPart["ignore-cert"] = "true";
+                argumentsPart["security"] = "any";
 
                 //Client screen resize
                 argumentsPart["resize-method"] = "display-update";
 
                 //UI Effect
-                argumentsPart["enable-wallpaper"] = "true";
-                argumentsPart["enable-full-window-drag"] = "true";
+                if (params.RDP_Wallpaper) {
+                    argumentsPart["enable-wallpaper"] = "true";
+                }
+
+                if (params.RDP_Theming) {
+                    argumentsPart["enable-theming"] = "true";
+                }
+
+                if (params.RDP_FontSmoothing) {
+                    argumentsPart["enable-font-smoothing"] = "true";
+                }
+
+                if (params.RDP_FullWindowDrag) {
+                    argumentsPart["enable-full-window-drag"] = "true";
+                }
+
+                if (params.RDP_DesktopComposition) {
+                    argumentsPart["enable-desktop-composition"] = "true";
+                }
+
+                if (params.RDP_MenuAnimations) {
+                    argumentsPart["enable-menu-animations"] = "true";
+                }
 
                 //File transfer
                 argumentsPart["enable-sftp"] = "true";
                 argumentsPart["sftp-password"] = params.Password;
                 argumentsPart["sftp-server-alive-interval"] = "2";
-                argumentsPart["api-session-timeout"] = "60";
-                argumentsPart["api-max-request-size"] = "0";
             }
 
             const tokenURL = `${params.GuacamoleSharpTokenURL}/${params.GuacamoleSharpTokenPhrase}`;
@@ -997,21 +1017,25 @@ const RemoteGateway = () => {
                                                     </IconButton>
                                                 </Tooltip>
                                         }
-                                        <Tooltip arrow title="File transfer" onClick={() => {
-                                            //從根目錄 / 開始向Guacamole詢問路徑是否為檔案或目錄
-                                            refFileSystem.current?.requestInputStream('/', (inStream, mimeType) => {
-                                                onBody({
-                                                    inStream: inStream,
-                                                    mimeType: mimeType,
-                                                    path: '/'
+                                        {
+                                            //Guacamole只有RDP支援用SFTP進行資料傳輸
+                                            params.Type == "RDP" &&
+                                            <Tooltip arrow title="File transfer" onClick={() => {
+                                                //從根目錄 / 開始向Guacamole詢問路徑是否為檔案或目錄
+                                                refFileSystem.current?.requestInputStream('/', (inStream, mimeType) => {
+                                                    onBody({
+                                                        inStream: inStream,
+                                                        mimeType: mimeType,
+                                                        path: '/'
+                                                    });
                                                 });
-                                            });
-                                            modalRef.current?.setOpen(true);
-                                        }} >
-                                            <IconButton>
-                                                <FileCopyIcon />
-                                            </IconButton>
-                                        </Tooltip>
+                                                modalRef.current?.setOpen(true);
+                                            }} >
+                                                <IconButton>
+                                                    <FileCopyIcon />
+                                                </IconButton>
+                                            </Tooltip>
+                                        }
                                         <Tooltip arrow title="Disconnect from remote service">
                                             <IconButton onClick={async () => {
                                                 if (refTunnel.current?.isConnected()) {

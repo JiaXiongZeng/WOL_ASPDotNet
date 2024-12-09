@@ -279,6 +279,8 @@ const CustomizedDialog = forwardRef<CustomizedDialogHandler, Partial<CustomizedD
                 disableEnforceFocus={minimize}
                 //Avoid aria-hidden block error
                 closeAfterTransition={false}
+                //Avoid the file explorer leaving behind in full screen mode
+                disablePortal={true}
                 componentsProps={
                     {
                         //讓整個dialog可以被drop在MUI Dialog root或body的任何地方
