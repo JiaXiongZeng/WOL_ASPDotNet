@@ -9,36 +9,59 @@ import AccordionDetails from '@mui/material/AccordionDetails';
 import CardContent from '@mui/material/CardContent';
 import Typography from '@mui/material/Typography';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import FormControl from '@mui/material/FormControl';
+import FormLabel from '@mui/material/FormLabel';
+import FormGroup from '@mui/material/FormGroup';
+import FormControlLabel, { FormControlLabelProps } from '@mui/material/FormControlLabel';
+import Checkbox from '@mui/material/Checkbox';
 import TextField from '@mui/material/TextField';
 
+import ToolTip from '@mui/material/Tooltip';
 import IconButton from '@mui/material/IconButton';
 import DeleteIcon from '@mui/icons-material/Delete';
+import WarningIcon from '@mui/icons-material/Warning';
 
-import { useForm } from "react-hook-form";
+import { useForm, Controller } from "react-hook-form";
 
 import axios from 'axios';
 
 import { HostCrendentialViewModel } from '@models/HostCredentialViewModel';
 import { PutHostCredentailViewModel } from '@models/PutHostCredentialViewModel';
+import { HostPreferenceViewModel } from '@models/HostPreferenceViewModel';
+import { PutHostPreferenceViewModel } from '@models/PutHostPreferenceViewModel';
 
 import { MESSAGE_STATUS, ResponseMessage } from '@models/ResponseMessage';
 
 import { NumericValue } from '@utilities/FormUtility';
 
 
+export type PutHostConnectionSettings = PutHostCredentailViewModel & PutHostPreferenceViewModel;
+export type HostConnectionSettingsViewModel = HostCrendentialViewModel & HostPreferenceViewModel;
+
+
 export interface ConnectionSettingsPanelProp {
-    data: HostCrendentialViewModel
+    data: HostConnectionSettingsViewModel
 }
 
 export type ConnectionSettingsPanelHandler = {
     getValidationResult: (e?: React.BaseSyntheticEvent<object, any, any> | undefined) => Promise<boolean>,
-    getSubmitData: () => PutHostCredentailViewModel
+    getSubmitData: () => PutHostConnectionSettings
 }
 
 //Delete icon
 const Delete = styled(DeleteIcon)(() => ({
     color: "#03AED2"
 }));
+
+//Customized FormControllLabel with minimal width for preetier layout
+const CustFormControlLabel = (props: FormControlLabelProps) => {
+    return <FormControlLabel {...props} componentsProps={{
+        typography: {
+            component: 'div',
+            minWidth: '195px'
+        }
+    }} />
+}
 
 const ConnectionSettingsPanel = forwardRef<ConnectionSettingsPanelHandler, ConnectionSettingsPanelProp>((props, ref) => {
     const { data } = props;
@@ -55,6 +78,7 @@ const ConnectionSettingsPanel = forwardRef<ConnectionSettingsPanelHandler, Conne
         register,
         reset,
         setValue,
+        control,
         handleSubmit,
         watch,
         formState: { isValid }
@@ -85,7 +109,7 @@ const ConnectionSettingsPanel = forwardRef<ConnectionSettingsPanelHandler, Conne
             return isValid;
         },
         getSubmitData: () => {
-            return watch() as PutHostCredentailViewModel;
+            return watch() as PutHostConnectionSettings;
         }
     }), [watch, isValid]);
 
@@ -94,7 +118,7 @@ const ConnectionSettingsPanel = forwardRef<ConnectionSettingsPanelHandler, Conne
         max: 65535
     }
 
-    const limitPortValue = (fieldName: keyof HostCrendentialViewModel, e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    const limitPortValue = (fieldName: keyof HostConnectionSettingsViewModel, e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
         const portNum = parseInt(e.target.value);
         if (isNaN(portNum)) {
             e.target.value = "0";
@@ -123,39 +147,58 @@ const ConnectionSettingsPanel = forwardRef<ConnectionSettingsPanelHandler, Conne
         }, 150);        
     }
 
-    const deleteCredential = async (macAddress: string) => {
-        await axios.delete<ResponseMessage<number>>("/HostCredential/Delete", {
+    const deleteCredential = (macAddress: string) => {
+        const delCredential = axios.delete<ResponseMessage<number>>("/HostCredential/Delete", {
             params: {
                 macAddress: macAddress
             }
-        }).then(resp => {
-            const respData = resp.data;
-            if (respData.Status == MESSAGE_STATUS.OK) {
-                if (respData.Attachment) {
-                    const emptyData = {
-                        MacAddress: data.MacAddress
-                    } as HostCrendentialViewModel;
-                    setConnSettings(emptyData);
-                    reset({
-                        MacAddress: data.MacAddress,
-                        RDP_Domain: null,
-                        RDP_Port: null,
-                        RDP_UserName: null,
-                        RDP_Password: null,
-                        SSH_UserName: null,
-                        SSH_Password: null,
-                        SSH_Port: null,
-                        VNC_UserName: null,
-                        VNC_Port: null,
-                        VNC_Password: null,
-                        CreateId: null,
-                        CreateDatetime: null,
-                        UpdateId: null,
-                        UpdateDatetime: null
-                    });
-                }
+        });
+
+        const delPreference = axios.delete<ResponseMessage<number>>("/HostPreference/Delete", {
+            params: {
+                macAddress: macAddress
             }
         });
+
+        Promise.all([delCredential, delPreference])
+            .then(responses => {
+                const respCredential = responses[0].data;
+                const respReference = responses[1].data;
+
+                if (respCredential.Status == MESSAGE_STATUS.OK &&
+                    respReference.Status == MESSAGE_STATUS.OK) {
+                    const affectedRows = respCredential.Attachment! + respReference.Attachment!;
+                    if (affectedRows) {
+                        const emptyData = {
+                            MacAddress: data.MacAddress
+                        } as HostConnectionSettingsViewModel;
+                        setConnSettings(emptyData);
+                        reset({
+                            MacAddress: data.MacAddress,
+                            RDP_Domain: null,
+                            RDP_Port: null,
+                            RDP_UserName: null,
+                            RDP_Password: null,
+                            RDP_Wallpaper: null,
+                            RDP_Theming: null,
+                            RDP_FontSmoothing: null,
+                            RDP_FullWindowDrag: null,
+                            RDP_DesktopComposition: null,
+                            RDP_MenuAnimations: null,
+                            SSH_UserName: null,
+                            SSH_Password: null,
+                            SSH_Port: null,
+                            VNC_UserName: null,
+                            VNC_Port: null,
+                            VNC_Password: null,
+                            CreateId: null,
+                            CreateDatetime: null,
+                            UpdateId: null,
+                            UpdateDatetime: null
+                        });
+                    }
+                }
+            });
     }
 
     return (
@@ -169,8 +212,8 @@ const ConnectionSettingsPanel = forwardRef<ConnectionSettingsPanelHandler, Conne
                 {
                     showDelete &&
                     <IconButton
-                        onClick={async () => {
-                            await deleteCredential(connSettings.MacAddress);
+                        onClick={() => {
+                            deleteCredential(connSettings.MacAddress);
                         }}>
                         <Delete />
                     </IconButton>
@@ -230,6 +273,44 @@ const ConnectionSettingsPanel = forwardRef<ConnectionSettingsPanelHandler, Conne
                             variant="standard"
                             autoComplete="current-password"
                         />
+                        <FormControl component="fieldset" sx={{ mt:2 }} >
+                            <FormLabel component="legend" sx={{ display: 'flex', alignItems: 'center' }} >
+                                Preference
+                                <ToolTip arrow placement="right" title={
+                                    <Box>
+                                        <Typography variant="h6" sx={{ fontWeight: 'bold' }} >Warning: </Typography>
+                                        <Typography variant="caption">Enable the following parameters will downgrade the render performance!</Typography>
+                                    </Box>
+                                }>
+                                    <WarningIcon sx={{
+                                        ml: 1,
+                                        '&:hover': {
+                                            cursor: 'help'
+                                        }
+                                    }} color="warning" />
+                                </ToolTip>
+                            </FormLabel>
+                        </FormControl>
+                        <FormGroup row={true} >
+                            <Controller name="RDP_Wallpaper" control={control} render={({ field }) => (
+                                <CustFormControlLabel control={<Checkbox {...field} checked={field.value?? false} />} label="Wallpaper" />
+                            )} />
+                            <Controller name="RDP_Theming" control={control} render={({ field }) => (
+                                <CustFormControlLabel control={<Checkbox {...field} checked={field.value?? false} />} label="Theming" />
+                            )} />
+                            <Controller name="RDP_FontSmoothing" control={control} render={({ field }) => (
+                                <CustFormControlLabel control={<Checkbox {...field} checked={field.value?? false} />} label="Font Smoothing" />
+                            )} />
+                            <Controller name="RDP_FullWindowDrag" control={control} render={({ field }) => (
+                                <CustFormControlLabel control={<Checkbox {...field} checked={field.value?? false} />} label="Full Window Drag" />
+                            )} />
+                            <Controller name="RDP_DesktopComposition" control={control} render={({ field }) => (
+                                <CustFormControlLabel control={<Checkbox {...field} checked={field.value?? false} />} label="Desktop Composition" />
+                            )} />
+                            <Controller name="RDP_MenuAnimations" control={control} render={({ field }) => (
+                                <CustFormControlLabel control={<Checkbox {...field} checked={field.value?? false} />} label="Menu Animations" />
+                            )} />
+                        </FormGroup>
                     </CardContent>
                 </AccordionDetails>
             </Accordion>

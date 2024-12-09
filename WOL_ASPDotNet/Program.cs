@@ -96,6 +96,7 @@ builder.Services.AddScoped<IUserRepository, UserRepository>();
 builder.Services.AddScoped<ICryptoUtility, CryptoUtility>();
 builder.Services.AddScoped<IKeyRingRepository, KeyRingRepository>();
 builder.Services.AddScoped<IHostCredentialRepository, HostCredentialRepository>();
+builder.Services.AddScoped<IHostPreferenceRepository, HostPreferenceRepository>();
 
 var app = builder.Build();
 

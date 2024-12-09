@@ -10,9 +10,9 @@ namespace WOL_ASPDotNet.Repository.Implement
     {
         private IDBConnectionHelper _dbConnHelp;
 
-        public HostCredentialRepository(IDBConnectionHelper dBConnectionHelper)
+        public HostCredentialRepository(IDBConnectionHelper dbConnectionHelper)
         {
-            this._dbConnHelp = dBConnectionHelper;
+            this._dbConnHelp = dbConnectionHelper;
         }
 
         public async Task<HostCredentialDataModel> GetAsync(string macAddress)

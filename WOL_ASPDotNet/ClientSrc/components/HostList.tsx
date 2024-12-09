@@ -45,8 +45,9 @@ import { TableHead, TableRow } from '@utilities/styles/CustomizedTableStyle';
 
 import { ConfigContext } from '@components/ConfigContext';
 
-import ConnectionSettingsPanel, { ConnectionSettingsPanelHandler } from '@components/ConnectionSettingsPanel';
+import ConnectionSettingsPanel, { ConnectionSettingsPanelHandler, HostConnectionSettingsViewModel } from '@components/ConnectionSettingsPanel';
 import { HostCrendentialViewModel } from '@models/HostCredentialViewModel';
+import { HostPreferenceViewModel } from '@models/HostPreferenceViewModel';
 
 //import { submitForm } from '@utilities/FormUtility';
 
@@ -54,6 +55,8 @@ import { MESSAGE_STATUS, ResponseMessage } from '@models/ResponseMessage';
 import { ICMPEchoInfo } from '@models/ICMPEchoInfo';
 
 import * as lodash from 'lodash';
+import { PutHostCredentailViewModel } from '@models/PutHostCredentialViewModel';
+import { PutHostPreferenceViewModel } from '@models/PutHostPreferenceViewModel';
 
 //Power on icon
 const PowerOn = styled(DeviceHubIcon)(() => ({
@@ -253,30 +256,52 @@ const HostList = forwardRef<HostListHandler, HostListProp>((props, ref) => {
         );
     }, [isPingStart]);
 
-    const loadConnSettings = async (macAddress: string) => {
-        await axios.get<ResponseMessage<HostCrendentialViewModel>>("/HostCredential/Get", {
+    const loadConnSettings = (macAddress: string) => {
+        const getCredential = axios.get<ResponseMessage<HostCrendentialViewModel>>("/HostCredential/Get", {
             params: {
                 macAddress: macAddress
             }
-        }).then(resp => {
-            const respData = resp.data;
-            let contentNode: ReactNode = null;
-            let contentData: Nullable<HostCrendentialViewModel> = null;
-            if (respData.Status == MESSAGE_STATUS.OK) {
-                if (respData.Attachment) {
-                    contentData = { ...respData.Attachment };
-                    contentNode = <ConnectionSettingsPanel data={contentData} ref={connSettingsRef} />;
-                } else {
-                    contentData = {
-                        MacAddress: macAddress
-                    } as HostCrendentialViewModel;
-                    contentNode = <ConnectionSettingsPanel data={contentData} ref={connSettingsRef} />;
-                }
+        });
 
-                modalConnSettingsRef.current?.setContentPanel(contentNode);
-                modalConnSettingsRef.current?.setOpen(true);
+        const getPreference = axios.get<ResponseMessage<HostPreferenceViewModel>>("/HostPreference/Get", {
+            params: {
+                macAddress: macAddress
             }
         });
+
+        Promise.all([getCredential, getPreference])
+            .then(responses => {
+                const respCredentialData = responses[0].data;
+                const respPreferenceData = responses[1].data;
+
+                let contentNode: ReactNode = null;
+                let contentData: Nullable<Partial<HostConnectionSettingsViewModel>> = null;
+                if (respCredentialData.Status == MESSAGE_STATUS.OK &&
+                    respPreferenceData.Status == MESSAGE_STATUS.OK) {
+                    if (respCredentialData.Attachment) {
+                        contentData = { ...respCredentialData.Attachment };
+                    }
+
+                    if (respPreferenceData.Attachment) {
+                        contentData = { ...(contentData || {}), ...respPreferenceData.Attachment };
+                    }
+
+
+                    if (contentData) {
+                        contentNode = <ConnectionSettingsPanel data={contentData as HostConnectionSettingsViewModel} ref={connSettingsRef} />;
+                    } else {
+                        contentData = {
+                            MacAddress: macAddress
+                        };
+                        contentNode = <ConnectionSettingsPanel data={contentData as HostConnectionSettingsViewModel} ref={connSettingsRef} />;
+                    }
+
+                    modalConnSettingsRef.current?.setContentPanel(contentNode);
+                    modalConnSettingsRef.current?.setOpen(true);
+                }
+            }).catch(reason => {
+                console.log(reason);
+            });
     };
 
     useImperativeHandle(ref, () => {
@@ -409,24 +434,37 @@ const HostList = forwardRef<HostListHandler, HostListProp>((props, ref) => {
                                                                                 tooltipTitle={action.name}
                                                                                 sx={{ pdding: "0px", margin: "0px", marginRight: "4px"/*, marginTop: "4px"*/ }}
                                                                                 onClick={() => {
-                                                                                    //Get connection settings from DB
-                                                                                    axios.get<ResponseMessage<any>>(`/HostCredential/Get${action.type}`, {
+                                                                                    //Get login credential of connection settings
+                                                                                    const getCredential = axios.get<ResponseMessage<any>>(`/HostCredential/Get${action.type}`, {
                                                                                         params: {
                                                                                             macAddress: row.MacAddress
                                                                                         }
-                                                                                    }).then(resp => {
-                                                                                        const respData = resp.data;
-                                                                                        if (respData.Status == MESSAGE_STATUS.OK) {
-                                                                                            navigateTo("/RemoteGateway", {
-                                                                                                Type: action.type,
-                                                                                                Ip: row.IPv4,
-                                                                                                GuacamoleSharpWebSocket: configs?.GuacamoleSharpWebSocket,
-                                                                                                GuacamoleSharpTokenURL: configs?.GuacamoleSharpTokenURL,
-                                                                                                GuacamoleSharpTokenPhrase: configs?.GuacamoleSharpTokenPhrase,
-                                                                                                ...respData.Attachment
-                                                                                            });
+                                                                                    });
+
+                                                                                    //Get preferences of connection settings
+                                                                                    const getPreference = axios.get<ResponseMessage<any>>(`/HostPreference/Get${action.type}`, {
+                                                                                        params: {
+                                                                                            macAddress: row.MacAddress
                                                                                         }
                                                                                     });
+
+                                                                                    Promise.all([getCredential, getPreference])
+                                                                                        .then(responses => {
+                                                                                            const respCredential = responses[0].data;
+                                                                                            const respPreference = responses[1].data;
+                                                                                            if (respCredential.Status == MESSAGE_STATUS.OK &&
+                                                                                                respPreference.Status == MESSAGE_STATUS.OK) {
+                                                                                                navigateTo("/RemoteGateway", {
+                                                                                                    Type: action.type,
+                                                                                                    Ip: row.IPv4,
+                                                                                                    GuacamoleSharpWebSocket: configs?.GuacamoleSharpWebSocket,
+                                                                                                    GuacamoleSharpTokenURL: configs?.GuacamoleSharpTokenURL,
+                                                                                                    GuacamoleSharpTokenPhrase: configs?.GuacamoleSharpTokenPhrase,
+                                                                                                    ...(respCredential.Attachment || {}),
+                                                                                                    ...(respPreference.Attachment || {})
+                                                                                                });
+                                                                                            }
+                                                                                        });
                                                                                 }} />
                                                                         )
                                                                     }
@@ -458,7 +496,7 @@ const HostList = forwardRef<HostListHandler, HostListProp>((props, ref) => {
                                                     )
                                                 }
                                             
-                                                <Tooltip arrow title="Config the RDP settings">
+                                                <Tooltip arrow title="Config the connection settings">
                                                         <IconButton onClick={async () => {
                                                             await loadConnSettings(row.MacAddress);
                                                         }}>
@@ -521,27 +559,41 @@ const HostList = forwardRef<HostListHandler, HostListProp>((props, ref) => {
                                 if (isValid) {
                                     const submitData = connSettingsRef.current?.getSubmitData();
 
-                                    axios.put<ResponseMessage<number>>("/HostCredential/Update", submitData, {
-                                        responseType: "json"
-                                    }).then(async (resp) => {
-                                        const respData = resp.data;
-                                        if (respData.Status == MESSAGE_STATUS.OK) {
-                                            modalInfoRef.current?.setContentPanel(
-                                                <Typography>
-                                                    {`${respData.Attachment} connection setting has been altered!`}
-                                                </Typography>
-                                            );
-                                            await loadConnSettings(submitData?.MacAddress!);
-                                        } else {
-                                            modalInfoRef.current?.setContentPanel(
-                                                <Typography>
-                                                    {respData.Message}
-                                                </Typography>
-                                            );
-                                        }
+                                    const hostCredentialData = submitData as PutHostCredentailViewModel;
+                                    const hostPreferenceData = submitData as PutHostPreferenceViewModel;
 
-                                        modalInfoRef.current?.setOpen(true);
+                                    const saveCredentialData = axios.put<ResponseMessage<number>>("/HostCredential/Update", hostCredentialData, {
+                                        responseType: "json"
                                     });
+
+                                    const savePreferenceData = axios.put<ResponseMessage<number>>("/HostPreference/Update", hostPreferenceData, {
+                                        responseType: "json"
+                                    });
+
+                                    Promise.all([saveCredentialData, savePreferenceData])
+                                        .then(responses => {
+                                            const respCredentialData = responses[0].data;
+                                            const respPreferenceData = responses[1].data;
+
+                                            if (respCredentialData.Status == MESSAGE_STATUS.OK &&
+                                                respPreferenceData.Status == MESSAGE_STATUS.OK) {
+                                                modalInfoRef.current?.setContentPanel(
+                                                    <Typography>
+                                                        {`${respCredentialData.Attachment! + respPreferenceData.Attachment!} connection setting has been altered!`}
+                                                    </Typography>
+                                                );
+                                                loadConnSettings(submitData?.MacAddress!);
+                                            } else {
+                                                modalInfoRef.current?.setContentPanel(
+                                                    <Typography>
+                                                        {respCredentialData.Message}
+                                                        {respPreferenceData.Message}
+                                                    </Typography>
+                                                );
+                                            }
+
+                                            modalInfoRef.current?.setOpen(true);
+                                        });
                                 }
                             }}>
                             <SaveIcon />
