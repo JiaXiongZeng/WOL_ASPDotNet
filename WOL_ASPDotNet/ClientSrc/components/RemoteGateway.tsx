@@ -456,7 +456,7 @@ const RemoteGateway = () => {
                     //make a tolerence for 8 secs to leave(maybe some network jammed)
                     if (refIsConfirmDisconnect.current) {
                         navigateTo("/");
-                    } else {                        
+                    } else {
                         setTimeout(() => {
                             if (refIsConfirmDisconnect.current) {
                                 navigateTo("/");
@@ -479,13 +479,20 @@ const RemoteGateway = () => {
 
         //The input sink
         const sink = new Guacamole.InputSink();
-        display.appendChild(sink.getElement());
+        const sinkElem = sink.getElement();
+        //Disable IME mode (To avoid the nested desktop intefered by the outer host desktop)
+        //sinkElem.style.setProperty('ime-mode', 'disabled'); //Deprecated!
+        sinkElem.inputMode = "latin"; //Use non-IME input
+        display.appendChild(sinkElem);
         sink.focus();
+        //Make input sink focused after the mouse down event triggered by display element
+        //If you miss this line, it will be short time no keyboard input after you press the canvas
+        display.onmousedown = () => { sink.focus(); }
         refSink.current = sink;
 
         // Keyboard events
         //const kb = new Guacamole.Keyboard(document);
-        const kb = new Guacamole.Keyboard(sink.getElement());
+        const kb = new Guacamole.Keyboard(sinkElem);
         kb.onkeydown = (keysym: number) => {
             client.sendKeyEvent(1, keysym);
         };
