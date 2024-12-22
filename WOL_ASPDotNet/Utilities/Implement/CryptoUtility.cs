@@ -47,7 +47,7 @@ namespace WOL_ASPDotNet.Utilities.Implement
             using(var RSA = new RSACryptoServiceProvider())
             {
                 RSA.ImportCspBlob(Convert.FromBase64String(this._privateKey));
-                var raw = RSA.Decrypt(data, false);
+                var raw = RSA.Decrypt(data, true);
                 return raw;
             }            
         }
@@ -77,7 +77,7 @@ namespace WOL_ASPDotNet.Utilities.Implement
             using (var RSA = new RSACryptoServiceProvider())
             {
                 RSA.ImportCspBlob(Convert.FromBase64String(this._publicKey));
-                var cypher = RSA.Encrypt(data, false);
+                var cypher = RSA.Encrypt(data, true);
                 return cypher;
             }            
         }
