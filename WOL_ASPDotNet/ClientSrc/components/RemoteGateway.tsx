@@ -12,6 +12,7 @@ import Slide from '@mui/material/Slide';
 import Paper from '@mui/material/Paper';
 
 import Tooltip from '@mui/material/Tooltip';
+import Button from '@mui/material/Button';
 import IconButton from '@mui/material/IconButton';
 import OpenInFullIcon from '@mui/icons-material/OpenInFull';
 import CloseFullscreenIcon from '@mui/icons-material/CloseFullscreen';
@@ -120,6 +121,7 @@ const RemoteGateway = () => {
     const [arrowRef, setArrowRef] = useState<Nullable<HTMLSpanElement>>(null);
     const modalRef = useRef<CustomizedDialogHandler>(null);
     const modalHintRef = useRef<CustomizedDialogHandler>(null);
+    const modalSimulateBtnRef = useRef<CustomizedDialogHandler>(null);
 
     const fullScreenHandle = useFullScreenHandle();
 
@@ -375,6 +377,95 @@ const RemoteGateway = () => {
     }, [resizeScreen]);
 
     useEffect(() => {
+        // Keyboard lock feature detection (Chromium browsers support)
+        const supportsKeyboardLock =
+            ('keyboard' in navigator) && ('lock' in navigator.keyboard);
+
+        // Disable escape from full screen mode with Esc
+        const disabledFullScreenEsc = async () => {
+            if (document.fullscreenElement) {
+                // The magic happens here… 🦄
+                await navigator.keyboard.lock(['Escape']);
+                //console.log('Keyboard locked.');
+                return;
+            }
+            navigator.keyboard.unlock();
+            //console.log('Keyboard unlocked.');
+        };
+
+        if (supportsKeyboardLock) {
+            document.addEventListener('fullscreenchange', disabledFullScreenEsc);
+        }
+
+        //Prevent from refresh with F5 or Ctrl+F5
+        const disableFnKeydown = (e: KeyboardEvent) => {
+            const { key, ctrlKey } = e;
+            if (
+                //Refresh Short Cuts
+                key === 'F5' ||
+                (ctrlKey && key === 'F5')
+            ) {
+                e.preventDefault();
+            }
+        }
+        window.addEventListener('keydown', disableFnKeydown);
+
+        //Prevent from leaving with alt+F4 or something seems like
+        const preventLeave = (e: BeforeUnloadEvent) => {
+            e.preventDefault();
+            modalSimulateBtnRef.current?.setOpen(true);
+
+            return '';
+        }
+        window.addEventListener('beforeunload', preventLeave);
+
+
+        return () => {
+            if (supportsKeyboardLock) {
+                document.removeEventListener('fullscreenchange', disabledFullScreenEsc);
+            }
+
+            window.removeEventListener('keydown', disableFnKeydown);
+            window.removeEventListener('beforeunload', preventLeave);
+        }
+    }, []);
+
+    const dispatchAltF4ToInputSink = useCallback(() => {
+        const inputSink = refSink.current?.getElement()!;
+
+        // Simulate the `keydown` event
+        const keydownEvent = new KeyboardEvent('keydown', {
+            key: 'F4',
+            code: 'F4',
+            altKey: true,
+            bubbles: true,
+            cancelable: true,
+            isComposing: true, // Mark this as part of a composition process
+        });
+        inputSink.dispatchEvent(keydownEvent);
+
+        // Simulate the `input` event
+        const inputEvent = new InputEvent('input', {
+            data: '\u001b[15~', // Example sequence for F4
+            bubbles: true,
+            cancelable: true,
+            isComposing: false, // Signals the composition has ended
+        });
+        inputSink.dispatchEvent(inputEvent);
+
+        // Simulate the `keyup` event
+        const keyupEvent = new KeyboardEvent('keyup', {
+            key: 'F4',
+            code: 'F4',
+            altKey: true,
+            bubbles: true,
+            cancelable: true,
+            isComposing: false, // No longer part of a composition process
+        });
+        inputSink.dispatchEvent(keyupEvent);
+    }, [refSink.current]);
+
+    useEffect(() => {
         //const tunnel = new Guacamole.WebSocketTunnel("ws://localhost:8088/connect");
         const tunnel = new Guacamole.WebSocketTunnel(params.GuacamoleSharpWebSocket!);
         refTunnel.current = tunnel;
@@ -411,7 +502,7 @@ const RemoteGateway = () => {
         }
 
         // Copy to remote host
-        window.onfocus = () => {
+        const copyToRemoteHost = () => {
             const copyToRemote = async () => {
                 try {
                     const clipboardItems = await navigator.clipboard.read();
@@ -437,6 +528,13 @@ const RemoteGateway = () => {
             }
             copyToRemote();
         }
+        window.addEventListener('focus', copyToRemoteHost);
+
+        // Window events
+        const windowHide = () => {
+            client.disconnect();
+        };
+        window.addEventListener('pagehide', windowHide);
 
         client.onfilesystem = async (object, _name) => {
             refFileSystem.current = object;
@@ -491,7 +589,6 @@ const RemoteGateway = () => {
         refSink.current = sink;
 
         // Keyboard events
-        //const kb = new Guacamole.Keyboard(document);
         const kb = new Guacamole.Keyboard(sinkElem);
         kb.onkeydown = (keysym: number) => {
             client.sendKeyEvent(1, keysym);
@@ -508,11 +605,6 @@ const RemoteGateway = () => {
             () => {
                 client.sendMouseState(mouse.currentState);
             });
-
-        // Window events
-        window.onpagehide = () => {
-            client.disconnect();
-        };
 
         const buildConn = async () => {
             //Get the arguments from the router
@@ -591,29 +683,19 @@ const RemoteGateway = () => {
                 }).catch(err => {
                     console.log(err);
                 });
-
-            //const sshArgs = {
-            //    "arguments": {
-            //        "hostname": "10.77.110.47",
-            //        "port": "22",
-            //        "width": `${containerRef.current?.offsetWidth}`,
-            //        "height": `${window.innerHeight - occupaciedHeight}`
-            //    },
-            //    "type": "ssh"
-            //};
-
-            //await axios.post<string>('http://localhost:8088/token/aA1234567', sendArgs)
-            //    .then(resp => {
-            //        const token = resp.data;
-            //        client.connect(`token=${token}`);
-            //    }).catch(err => {
-            //        console.log(err);
-            //    });
         }
         buildConn();
 
+        //The destroy handler
         return () => {
+            //Remove registed event handlers
+            window.removeEventListener('focus', copyToRemoteHost);
+            window.removeEventListener("pagehide", windowHide);
+
+            //Remove appended display container
             containerRef.current?.removeChild(display);
+
+            //Disconnect from server
             client.disconnect();
         }
     }, []);
@@ -947,6 +1029,31 @@ const RemoteGateway = () => {
                             autoClose={1000}
                             open={false}
                             ref={modalHintRef} >
+                        </CustomizedDialog>
+                        <CustomizedDialog
+                            title="Confirm"
+                            open={false}
+                            showClose={false}
+                            actionPanel={
+                                <Box>
+                                    <Button onClick={() => {
+                                        dispatchAltF4ToInputSink();
+                                        modalSimulateBtnRef.current?.setOpen(false);
+                                    }} >
+                                        <Typography>Signal Alt+F4</Typography>
+                                    </Button>
+                                    <Button onClick={() => {
+                                        modalSimulateBtnRef.current?.setOpen(false);
+                                    }} >
+                                        <Typography>No Thanks!</Typography>
+                                    </Button>
+                                </Box>
+                            }
+                            ref={modalSimulateBtnRef}
+                        >
+                            <Typography variant="body1" >
+                                Do you want to signal "alt + F4" to remote desktop?
+                            </Typography>
                         </CustomizedDialog>
                     </FullScreen>
                     <StyledPopper

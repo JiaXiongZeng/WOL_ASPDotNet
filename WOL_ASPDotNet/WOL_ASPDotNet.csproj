@@ -6,6 +6,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <UserSecretsId>edc8bd0e-a686-42e9-9c9e-49b12d453f8b</UserSecretsId>
     <DockerDefaultTargetOS>Linux</DockerDefaultTargetOS>
+    <ApplicationIcon>Resources\leaf.ico</ApplicationIcon>
   </PropertyGroup>
 
   <ItemGroup>
