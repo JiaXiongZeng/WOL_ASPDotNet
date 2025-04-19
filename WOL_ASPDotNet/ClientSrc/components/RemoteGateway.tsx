@@ -274,6 +274,14 @@ const RemoteGateway = () => {
         }
     }
 
+    //Grant readwrite access permission of file handle
+    const verifyReadWritePermission = async (handle: FileSystemDirectoryHandle, write: boolean) => {
+        const opts = write ? { mode: 'readwrite' } : {};
+        if ((await handle.queryPermission(opts)) === 'granted') return true;
+        if ((await handle.requestPermission(opts)) === 'granted') return true;
+        return false;
+    }
+
     useEffect(() => {
         if (isDownloading) {
             const queueTasksInPool = async () => {
@@ -397,15 +405,38 @@ const RemoteGateway = () => {
             document.addEventListener('fullscreenchange', disabledFullScreenEsc);
         }
 
-        //Prevent from refresh with F5 or Ctrl+F5
+        const preventDefaultShortcuts = (event: KeyboardEvent) => {
+            if (event.ctrlKey && ['F5', 't', 'n', 'w'].includes(event.key)) {
+                event.preventDefault(); // Prevents default browser shortcuts like Ctrl+F5, Ctrl+T, Ctrl+N, Ctrl+W
+            } else if(event.key == 'F5') {
+                event.preventDefault();
+            }
+        }
+
+        window.addEventListener('keydown', preventDefaultShortcuts);
+
+        // Prevent from refresh with F5 or Ctrl+F5
+        // Prevent from open new window with Ctrl+N
+        // Prevent from open new tab with Ctrl+T
         const disableFnKeydown = (e: KeyboardEvent) => {
             const { key, ctrlKey } = e;
-            if (
+
+            if (ctrlKey) {
+                switch (key) {
+                    case 'F5':
+                        dispatchTerminalKeys('F5', 'F5', { ctrlKey: true });
+                        break;
+                    case 't':
+                        dispatchTerminalKeys('t', 'KeyT', { ctrlKey: true });
+                        break;
+                    case 'n':
+                        dispatchTerminalKeys('n', 'KeyN', { ctrlKey: true });
+                        break;
+                }
+                return;
+            } else if (key == 'F5') {
                 //Refresh Short Cuts
-                key === 'F5' ||
-                (ctrlKey && key === 'F5')
-            ) {
-                e.preventDefault();
+                dispatchTerminalKeys('F5', 'F5');
             }
         }
         window.addEventListener('keydown', disableFnKeydown);
@@ -425,44 +456,62 @@ const RemoteGateway = () => {
                 document.removeEventListener('fullscreenchange', disabledFullScreenEsc);
             }
 
+            window.removeEventListener('keydown', preventDefaultShortcuts);
             window.removeEventListener('keydown', disableFnKeydown);
             window.removeEventListener('beforeunload', preventLeave);
         }
     }, []);
 
-    const dispatchAltF4ToInputSink = useCallback(() => {
-        const inputSink = refSink.current?.getElement()!;
+    const dispatchTerminalKeys = useCallback(
+        (
+            key: string,
+            code: string,
+            combineKeys?: {
+                ctrlKey?: boolean,
+                altKey?: boolean,
+                shiftKey?: boolean
+            }                       
+        ) => {
+            const inputSink = refSink.current?.getElement();
+            if (!inputSink) return;
 
-        // Simulate the `keydown` event
-        const keydownEvent = new KeyboardEvent('keydown', {
-            key: 'F4',
-            code: 'F4',
-            altKey: true,
-            bubbles: true,
-            cancelable: true,
-            isComposing: true, // Mark this as part of a composition process
-        });
-        inputSink.dispatchEvent(keydownEvent);
+            const isSimuComposing = Object.values(combineKeys || {}).indexOf(true) != -1;
 
-        // Simulate the `input` event
-        const inputEvent = new InputEvent('input', {
-            data: '\u001b[15~', // Example sequence for F4
-            bubbles: true,
-            cancelable: true,
-            isComposing: false, // Signals the composition has ended
-        });
-        inputSink.dispatchEvent(inputEvent);
+            // Simulate `keydown` event
+            const keydownEvent = new KeyboardEvent('keydown', {
+                key,
+                code,
+                ...combineKeys,
+                bubbles: false,
+                cancelable: true,
+                isComposing: isSimuComposing,  // Mark this as part of a composition process
+            });
+            inputSink.dispatchEvent(keydownEvent);            
 
-        // Simulate the `keyup` event
-        const keyupEvent = new KeyboardEvent('keyup', {
-            key: 'F4',
-            code: 'F4',
-            altKey: true,
-            bubbles: true,
-            cancelable: true,
-            isComposing: false, // No longer part of a composition process
-        });
-        inputSink.dispatchEvent(keyupEvent);
+            setTimeout(() => {
+                // Simulate `keyup` event
+                const keyupEvent = new KeyboardEvent('keyup', {
+                    key,
+                    code,
+                    ...combineKeys,
+                    bubbles: false,
+                    cancelable: true,
+                    isComposing: isSimuComposing,  // No longer part of a composition process
+                });
+                inputSink.dispatchEvent(keyupEvent);
+            }, 100);
+
+            //setTimeout(() => {
+            //    // Simulate the `input` event for ESC key 
+            //    // To prevent the simulated instuction to interfere with the others
+            //    const inputEvent = new InputEvent('input', {
+            //        data: '\u001b', // Example sequence for ESC
+            //        bubbles: false,
+            //        cancelable: true,
+            //        isComposing: false, // Signals the composition has ended
+            //    });
+            //    inputSink.dispatchEvent(inputEvent);
+            //}, 1000);
     }, [refSink.current]);
 
     useEffect(() => {
@@ -759,7 +808,7 @@ const RemoteGateway = () => {
 
                                             //Choose the client visible directory
                                             const dirHandle = await showDirectoryPicker();
-                                            if (dirHandle) {
+                                            if (dirHandle && (await verifyReadWritePermission(dirHandle, true))) {
                                                 refLocalFileExpRoot.current = dirHandle;
                                                 refFileExplorer.current?.renewLocalFsNodes({
                                                     ['/' + lodash.trimStart(dirHandle.name, '\\')]: {
@@ -1037,7 +1086,7 @@ const RemoteGateway = () => {
                             actionPanel={
                                 <Box>
                                     <Button onClick={() => {
-                                        dispatchAltF4ToInputSink();
+                                        dispatchTerminalKeys('F4', 'F4', { altKey: true });
                                         modalSimulateBtnRef.current?.setOpen(false);
                                     }} >
                                         <Typography>Signal Alt+F4</Typography>
